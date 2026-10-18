@@ -1,0 +1,67 @@
+appId: jp.manabi-lab.grareco
+productName: Realtime GraReco & Search
+copyright: Copyright © 2026 株式会社学びラボ
+protocols:
+  - name: Realtime GraReco & Search
+    schemes:
+      - grareco
+directories:
+  buildResources: resources
+extraResources:
+  - from: build/THIRD_PARTY_NOTICES.txt
+    to: THIRD_PARTY_NOTICES.txt
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{tailwind.config.js,postcss.config.js}'
+  - '!{electron-builder.yml,*.tsbuildinfo}'
+  - '!{build,certs,scripts}/**'
+win:
+  executableName: RealtimeGraRecoSearch
+  signtoolOptions:
+    sign: scripts/sign.js
+    signingHashAlgorithms:
+      - sha256
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  artifactName: RealtimeGraRecoSearch-${version}-setup.${ext}
+  shortcutName: Realtime GraReco & Search
+  uninstallDisplayName: Realtime GraReco & Search
+  createDesktopShortcut: always
+mac:
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
+  extraResources:
+    - from: build/PrivacyInfo.xcprivacy
+      to: PrivacyInfo.xcprivacy
+  extendInfo:
+    NSMicrophoneUsageDescription: "会議の音声を文字にするため、マイクを使います。"
+    NSScreenCaptureUsageDescription: "オンライン会議の音声を文字にするため、画面収録の許可を使います。カメラ観察で画面を選んだときは、約1分ごとに1枚を外部の AI で解析し、文章だけを残します。"
+    NSAudioCaptureUsageDescription: "オンライン会議の音声を文字にするため、パソコンで流れている音声を使います。"
+    NSCameraUsageDescription: "会議室のカメラ観察で、約1分ごとに1枚を外部の AI で解析し、文章だけを残します。画像は保存しません。"
+    NSLocationUsageDescription: "許可したときだけ、カメラ観察の記録に位置情報を付けます。"
+    NSBluetoothAlwaysUsageDescription: "このアプリは Bluetooth の機器と直接やりとりしません。Bluetooth のマイクやヘッドセットは、Mac の音声の設定のまま使えます。"
+    NSBluetoothPeripheralUsageDescription: "このアプリは Bluetooth の機器と直接やりとりしません。Bluetooth のマイクやヘッドセットは、Mac の音声の設定のまま使えます。"
+  target:
+    - target: dmg
+      arch:
+        - universal
+dmg:
+  artifactName: RealtimeGraRecoSearch-${version}-${arch}.${ext}
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  maintainer: Manabi-Lab-Organization
+  category: Utility
+appImage:
+  artifactName: RealtimeGraRecoSearch-${version}.${ext}

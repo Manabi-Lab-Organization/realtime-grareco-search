@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+electron-app
+mobile-app
+docs
+.git
+.github
+.env
+.env.*
+!.env.example

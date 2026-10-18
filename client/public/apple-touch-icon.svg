@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 125 125" width="125" height="125" role="img" aria-label="Realtime GraReco &amp; Search"><rect width="125" height="125" rx="25" fill="#1B6FB3"/>
+<g stroke-linecap="round" fill="none">
+  <g stroke="#FFFFFF" stroke-width="7">
+    <line x1="20" y1="54" x2="20" y2="70"/>
+    <line x1="32" y1="40" x2="32" y2="84"/>
+    <line x1="44" y1="48" x2="44" y2="76"/>
+    <line x1="56" y1="56" x2="56" y2="68"/>
+  </g>
+  <circle cx="84" cy="58" r="19" stroke="#FFFFFF" stroke-width="7"/>
+  <path d="M72 59 q6 -13 12 0 t12 0" stroke="#F5C04A" stroke-width="5"/>
+  <line x1="98" y1="72" x2="108" y2="82" stroke="#FFFFFF" stroke-width="8"/>
+</g></svg>

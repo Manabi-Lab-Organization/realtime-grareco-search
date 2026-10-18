@@ -1,0 +1,71 @@
+name: docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 依存を入れる
+        run: npm ci
+
+      - name: 型チェック（server）
+        run: npx tsc --noEmit -p server
+
+      - name: テスト（server）
+        run: npm test --workspace=server
+
+      - name: ビルド（client）
+        run: npm run build --workspace=client
+
+  compose-up:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: .env を作る（検証用の値）
+        run: |
+          {
+            echo "APP_URL=http://localhost:3000"
+            echo "SESSION_SECRET=$(openssl rand -hex 32)"
+            echo "POSTGRES_PASSWORD=ci-test-password"
+            echo "INITIAL_ADMIN_EMAIL=admin@example.com"
+            echo "ELEVENLABS_API_KEY=ci-dummy"
+            echo "ANTHROPIC_API_KEY=ci-dummy"
+          } > .env
+
+      - name: 立ち上げる
+        run: docker compose up -d --build
+
+      - name: 応答を確かめる
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/api/server-info > info.json; then break; fi
+            sleep 3
+          done
+          cat info.json
+          grep -q '"app":"realtime-grareco-search"' info.json
+          curl -fsS http://localhost:3000/api/features
+          curl -fsS http://localhost:3000/api/auth/signup-status | grep -q first_admin
+          curl -fsS http://localhost:3000/login | grep -qi '<html'
+          docker compose logs app | grep -q '初期設定コード'
+
+      - name: ログ（失敗したとき）
+        if: failure()
+        run: docker compose logs app

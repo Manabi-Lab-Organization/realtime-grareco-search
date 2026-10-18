@@ -1,0 +1,16 @@
+node_modules
+dist/
+*.tsbuildinfo
+*.log
+.DS_Store
+
+.env
+*.env.local
+
+server/src/db/migrations/*.sql
+client/src/**/*.js
+shared/src/**/*.js
+
+electron-app/out/
+electron-app/build/THIRD_PARTY_NOTICES.txt
+mobile-app/public/THIRD_PARTY_NOTICES.txt
