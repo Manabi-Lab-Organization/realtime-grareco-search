@@ -175,7 +175,7 @@ function check(label: string, cond: boolean, detail?: string) {
   check('年代を白髪などの見た目の特徴に置き換えない', memoLines.length === 4 && memoLines.every((l) => !/白髪|ベテラン|年配|高齢/.test(l)), memoLines.join(' | '));
   check('分からない性別と年代は書かない', section.includes('- 名前: mori') && !section.includes('mori ／'));
   check('日本語の名前は姓だけを使う', section.includes('- 名前: 山田 ') && !section.includes('山田 一郎'));
-  check('人物に添える文字は名前だけと指示する', section.includes('★人物に添える文字は名前だけ'));
+  check('人物に添える文字は登録された名前か役割だけと指示する', section.includes('★人物に添える文字は登録された名前か役割だけ'));
   check('参加者がいなければ空文字を返す', buildParticipantsSection([]) === '' && buildParticipantsSection([{ name: '  ' }]) === '');
 
   const unknownAge = buildParticipantsSection([{ name: 'x', gender: '女', age: '90代' }]);
