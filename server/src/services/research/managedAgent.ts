@@ -9,6 +9,13 @@ import { db } from '../../db/index.js';
 import { researchInsights, users, meetingImages } from '../../db/schema.js';
 import { broadcastToUser } from './connectionRegistry.js';
 import { auditLlmCall } from '../audit/audit.js';
+import {
+  DEFAULT_FACTCHECK_MODEL,
+  DEFAULT_HAIKU_MODEL,
+  describeResearchModelConfig,
+  loadResearchModelConfig,
+  type ResearchModelConfig,
+} from './modelConfig.js';
 
 export const SUB_AGENTS = {
   '補足情報': {
@@ -48,7 +55,7 @@ export const SUB_AGENTS = {
 ## 出力形式
 見つかった情報の要約（200字以内）、ソースURL（実在するもののみ）、信頼度を返してください。`,
     tools: ['WebSearch', 'WebFetch'],
-    model: 'haiku' as const,
+    model: DEFAULT_HAIKU_MODEL,
   },
   '事実確認': {
     description: '事実確認エージェント。会議で言及された数値・統計・引用・主張の正確性を複数ソースで検証する。背景情報・技術比較・論理批判は担当しない。',
@@ -81,7 +88,7 @@ export const SUB_AGENTS = {
 - 根拠となるソースURL
 - 修正値（correctedの場合）`,
     tools: ['WebSearch', 'WebFetch'],
-    model: 'sonnet' as const,
+    model: DEFAULT_FACTCHECK_MODEL,
   },
   '論理課題': {
     description: '論理課題エージェント。会議の発言に含まれる「明らかな矛盾」のみを検出する（自己矛盾・内部矛盾・前提-結論矛盾）。論理飛躍・未検証前提・確認漏れ・曖昧合意・定義不一致は議事録で拾うため担当外。',
@@ -119,7 +126,7 @@ Orchestrator が渡す「会議直近の発言履歴」を必ず参照し、**�
 - 種別（self_contradiction / internal / premise_conclusion）
 - importance: **75-95 固定**（矛盾は常に高重要度）`,
     tools: [],
-    model: 'haiku' as const,
+    model: DEFAULT_HAIKU_MODEL,
   },
   '技術情報': {
     description: '技術情報エージェント。会議で言及された技術テーマについて、OSS/GitHub・商用サービス・論文・業界動向を包括的に調査し、選定判断を支援する情報を提供する。人物背景・数値検証・論理批判は担当しない。',
@@ -166,7 +173,7 @@ Orchestrator から「明示意図あり」と指示された場合:
 - ソースURL（実在するもののみ）
 - 本文合計400字以内`,
     tools: ['WebSearch', 'WebFetch'],
-    model: 'haiku' as const,
+    model: DEFAULT_HAIKU_MODEL,
   },
 };
 
@@ -231,7 +238,6 @@ INSIGHT:{"cardType":"info|fact-check|gap-alert|minutes-todo","agentType":"web|fa
 
 ## ルール
 - 1回につき最大2件（明示意図時は最大3件）
-- 必ずサブエージェント経由（自分では検索しない）
 - 50字未満・相槌のみはスキップ（明示意図タグ時は必ず応答）
 - 重要情報なしならINSIGHTを出力しない
 
@@ -242,7 +248,7 @@ INSIGHT:{"cardType":"info|fact-check|gap-alert|minutes-todo","agentType":"web|fa
 - 調査は**一般化した用語**で行う（例:「株式会社サンプルの山田さんが話していた新しい在庫管理の仕組み」→「在庫管理 自動発注 仕組み」）
 - 会議の発言を**逐語でクエリにしない**。調べたい論点だけを抽出した最小限の語にする`;
 
-function buildFilteredOrchestratorPrompt(settings: ResearchSettings): string {
+export function buildFilteredOrchestratorPrompt(settings: ResearchSettings, orchestratorWeb = false): string {
   const enabledLabels: string[] = [];
   if (settings.web) enabledLabels.push('補足情報');
   if (settings.fact) enabledLabels.push('事実確認');
@@ -251,7 +257,11 @@ function buildFilteredOrchestratorPrompt(settings: ResearchSettings): string {
 
   const enabledNotice = `\n\n## 【重要】現在有効なサブエージェント\nユーザー設定により、以下のサブエージェントのみが使用可能です:\n${enabledLabels.map(l => `- ${l}`).join('\n')}\n\n**上記以外のサブエージェント（OFFにされたもの）は絶対に呼び出さないでください**。呼び出し不可能です。\n`;
 
-  return ORCHESTRATOR_PROMPT + enabledNotice;
+  const webNotice = orchestratorWeb
+    ? `\n## 自分で調べるか\n必要なら自分でも WebSearch・WebFetch を使えます。ただし、まず調査役に任せることを考えてください。\n`
+    : `\n## 自分で調べるか\nあなたは自分では検索もページの取得もしません。調べることは、すべて調査役に任せてください。\n`;
+
+  return ORCHESTRATOR_PROMPT + enabledNotice + webNotice;
 }
 
 type ResearchIntentCategory =
@@ -355,7 +365,20 @@ export async function initializeResearchAgent(): Promise<void> {
     console.error('[research] ANTHROPIC_API_KEY not set');
     return;
   }
-  console.log('[research] Agent SDK mode initialized (agents created per-query)');
+  const config = loadResearchModelConfig();
+  for (const w of config.warnings) console.warn(`[research] ${w}`);
+  console.log(describeResearchModelConfig(config));
+}
+
+export function applyConfiguredModels<T extends { model?: string }>(
+  agents: Record<string, T>,
+  config: ResearchModelConfig,
+): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [label, def] of Object.entries(agents)) {
+    out[label] = { ...def, model: label === '事実確認' ? config.factCheckModel : config.haikuModel };
+  }
+  return out;
 }
 
 export interface ResearchSettings {
@@ -726,6 +749,7 @@ class MeetingSession {
 
       this.appendToRecentTranscripts(combined);
 
+      const modelConfig = loadResearchModelConfig();
       const activeAgents: Record<string, typeof SUB_AGENTS[keyof typeof SUB_AGENTS]> = {};
       for (const [label, def] of Object.entries(SUB_AGENTS)) {
         const key = AGENT_KEY_BY_LABEL[label];
@@ -734,12 +758,12 @@ class MeetingSession {
         }
       }
 
-      const systemPromptFiltered = buildFilteredOrchestratorPrompt(effSettings);
-
       const researchQueryParams: Parameters<typeof runResearchQuery>[1] = {
-        agents: activeAgents,
-        systemPrompt: systemPromptFiltered,
-        model: 'sonnet',
+        agents: applyConfiguredModels(activeAgents, modelConfig),
+        systemPrompt: buildFilteredOrchestratorPrompt(effSettings, modelConfig.orchestratorWeb),
+        model: modelConfig.orchestratorModel,
+        effort: modelConfig.orchestratorEffort,
+        orchestratorWeb: modelConfig.orchestratorWeb,
       };
 
       for await (const message of runResearchQuery(prompt, researchQueryParams)) {
@@ -975,18 +999,20 @@ class MeetingSession {
       const manualTag = '[MANUAL_RESEARCH: ユーザー指定の過去発言を分析してください]\n\n';
       const prompt = `${manualTag}【文字起こし（選択範囲）】\n${combinedText}\n\n会議タイプ: ${this.meetingType}、優先エージェント: ${priorities.join(', ')}${dedupeContext}${headingsBlock}`;
 
+      const modelConfig = loadResearchModelConfig();
       const activeAgents: Record<string, typeof SUB_AGENTS[keyof typeof SUB_AGENTS]> = {};
       for (const [label, def] of Object.entries(SUB_AGENTS)) {
         const key = AGENT_KEY_BY_LABEL[label];
         if (key && !manualSettings[key]) continue;
         activeAgents[label] = def;
       }
-      const systemPromptFiltered = buildFilteredOrchestratorPrompt(manualSettings);
 
       const researchQueryParams: Parameters<typeof runResearchQuery>[1] = {
-        agents: activeAgents,
-        systemPrompt: systemPromptFiltered,
-        model: 'sonnet',
+        agents: applyConfiguredModels(activeAgents, modelConfig),
+        systemPrompt: buildFilteredOrchestratorPrompt(manualSettings, modelConfig.orchestratorWeb),
+        model: modelConfig.orchestratorModel,
+        effort: modelConfig.orchestratorEffort,
+        orchestratorWeb: modelConfig.orchestratorWeb,
       };
 
       let manualSubagents = 0;

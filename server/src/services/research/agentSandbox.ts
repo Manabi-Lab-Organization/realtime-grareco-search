@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentDefinition, HookCallback, Options, McpServerConfig, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { AgentDefinition, EffortLevel, HookCallback, Options, McpServerConfig, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { assertPublicUrl, type LookupFn } from '../net/publicUrl.js';
 
 export const RESEARCH_BUILTIN_TOOLS = ['WebSearch', 'WebFetch', 'Agent'] as const;
@@ -43,11 +43,19 @@ export function hardenSubAgents(agents: Record<string, AgentDefinition>): Record
   return out;
 }
 
+export const ORCHESTRATOR_AGENT_NAME = '司令塔';
+
+export function orchestratorTools(web: boolean): string[] {
+  return web ? ['Agent', 'WebSearch', 'WebFetch'] : ['Agent'];
+}
+
 export interface ResearchQueryParams {
   agents: Record<string, AgentDefinition>;
   systemPrompt: string;
   model: string;
   runDir: string;
+  effort?: EffortLevel;
+  orchestratorWeb?: boolean;
   mcpServers?: Record<string, McpServerConfig>;
   extraAllowedTools?: string[];
 }
@@ -155,13 +163,41 @@ export function makeSearchResultOnlyWebFetch(allowed: SearchResultUrls, lookupFn
   };
 }
 
+export const ORCHESTRATOR_WEBFETCH_DENY_REASON = '統括役は自分でページを開きません。調べたいことは調査役に任せてください。';
+
+export function makeDenyOrchestratorWebFetch(): HookCallback {
+  return async (input) => {
+    if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'WebFetch') return {};
+    if (input.agent_id) return {};
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: ORCHESTRATOR_WEBFETCH_DENY_REASON,
+      },
+    };
+  };
+}
+
+export function buildOrchestratorAgent(p: Pick<ResearchQueryParams, 'systemPrompt' | 'model' | 'effort' | 'orchestratorWeb'>): AgentDefinition {
+  const def: AgentDefinition = {
+    description: 'この調査を統括する役。調査の依頼先にはしない。',
+    prompt: p.systemPrompt,
+    tools: orchestratorTools(p.orchestratorWeb === true),
+    model: p.model,
+  };
+  if (p.effort) def.effort = p.effort;
+  return def;
+}
+
 export function buildResearchQueryOptions(p: ResearchQueryParams, allowedFetchUrls: SearchResultUrls = new SearchResultUrls()): Options {
   const options: Options = {
     tools: [...RESEARCH_BUILTIN_TOOLS],
     allowedTools: [...RESEARCH_BUILTIN_TOOLS, ...(p.extraAllowedTools ?? [])],
     disallowedTools: [...RESEARCH_DISALLOWED_TOOLS],
     permissionMode: 'dontAsk',
-    agents: hardenSubAgents(p.agents),
+    agents: hardenSubAgents({ ...p.agents, [ORCHESTRATOR_AGENT_NAME]: buildOrchestratorAgent(p) }),
+    agent: ORCHESTRATOR_AGENT_NAME,
     systemPrompt: p.systemPrompt,
     model: p.model,
     cwd: p.runDir,
@@ -169,10 +205,16 @@ export function buildResearchQueryOptions(p: ResearchQueryParams, allowedFetchUr
     settingSources: [],
     strictMcpConfig: true,
     hooks: {
-      PreToolUse: [{ matcher: 'WebFetch', hooks: [makeSearchResultOnlyWebFetch(allowedFetchUrls)] }],
+      PreToolUse: [{
+        matcher: 'WebFetch',
+        hooks: p.orchestratorWeb
+          ? [makeSearchResultOnlyWebFetch(allowedFetchUrls)]
+          : [makeSearchResultOnlyWebFetch(allowedFetchUrls), makeDenyOrchestratorWebFetch()],
+      }],
       PostToolUse: [{ matcher: 'WebSearch', hooks: [makeCollectSearchResultUrls(allowedFetchUrls)] }],
     },
   };
+  if (p.effort) options.effort = p.effort;
   if (p.mcpServers) options.mcpServers = p.mcpServers;
   return options;
 }
