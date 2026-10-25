@@ -24,3 +24,13 @@ export function supportsEffort(model: string): boolean {
 export function requiresDataRetention(model: string): boolean {
   return /fable|mythos/i.test(model);
 }
+
+export function acceptsTemperature(model: string): boolean {
+  const v = parseClaudeModelVersion(model);
+  return v !== null && !isAtLeast(v, 4, 7);
+}
+
+export function thinksByDefault(model: string): boolean {
+  const v = parseClaudeModelVersion(model);
+  return v !== null && v.major >= 5;
+}

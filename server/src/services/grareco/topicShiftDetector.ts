@@ -1,6 +1,7 @@
 
 import type { GoogleGenAI } from '@google/genai';
 import { createGenAI } from '../llm/genaiClient.js';
+import { GRARECO_DETECTION_MODEL } from '../llm/lightModel.js';
 import { analyzeWithClaude } from '../anthropicService.js';
 import {
   saveEmbeddingHistory,
@@ -10,7 +11,7 @@ import {
 } from './topicShiftHistoryService.js';
 
 const EMBED_MODEL = 'gemini-embedding-001';
-const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
+const HAIKU_MODEL = GRARECO_DETECTION_MODEL;
 
 const EMBED_INTERVAL_MS = 30 * 1000;
 const SIMILARITY_THRESHOLD = 0.70;
