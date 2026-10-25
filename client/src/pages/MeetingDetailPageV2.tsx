@@ -51,6 +51,7 @@ import { useResearchSettings } from '@/hooks/useResearchSettings';
 import { useTermGlossary } from '@/hooks/useTermGlossary';
 import { useGrarecoFeed, type GrarecoFeedItem } from '@/hooks/useGrarecoFeed';
 import { grarecoThumbUrl } from '@/lib/grarecoThumb';
+import { downloadImageAsPng, fetchImageAsPngBlob } from '@/lib/grarecoPng';
 import { useAgentAvailability } from '@/hooks/useAgentAvailability';
 import { apiRequest } from '@/lib/queryClient';
 import { Input } from '@/components/ui/input';
@@ -3743,28 +3744,7 @@ function ManualGrarecoDetail({
       return;
     }
     try {
-      const res = await fetch(imageUrl);
-      const originalBlob = await res.blob();
-      const pngBlob = await new Promise<Blob>((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            reject(new Error('canvas error'));
-            return;
-          }
-          ctx.drawImage(img, 0, 0);
-          canvas.toBlob((b) => {
-            if (b) resolve(b);
-            else reject(new Error('toBlob failed'));
-          }, 'image/png');
-        };
-        img.onerror = () => reject(new Error('image load error'));
-        img.src = URL.createObjectURL(originalBlob);
-      });
+      const pngBlob = await fetchImageAsPngBlob(imageUrl);
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
       toast({ title: '画像をコピーしました' });
     } catch {
@@ -3777,12 +3757,7 @@ function ManualGrarecoDetail({
     }
   };
   const handleDownload = () => {
-    const a = document.createElement('a');
-    a.href = imageUrl;
-    a.download = `grareco-${gr.id}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    void downloadImageAsPng(imageUrl, `grareco-${gr.id}.png`);
   };
   return (
     <>
@@ -4906,28 +4881,7 @@ async function copyGrarecoImage(
     return;
   }
   try {
-    const res = await fetch(item.imageUrl);
-    const originalBlob = await res.blob();
-    const pngBlob = await new Promise<Blob>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('canvas error'));
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob((b) => {
-          if (b) resolve(b);
-          else reject(new Error('toBlob failed'));
-        }, 'image/png');
-      };
-      img.onerror = () => reject(new Error('image load error'));
-      img.src = URL.createObjectURL(originalBlob);
-    });
+    const pngBlob = await fetchImageAsPngBlob(item.imageUrl);
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
     toast({ title: '画像をコピーしました' });
   } catch {

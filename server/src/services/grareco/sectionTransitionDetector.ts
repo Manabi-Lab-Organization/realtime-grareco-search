@@ -1,7 +1,8 @@
 
+import { GRARECO_DETECTION_MODEL } from '../llm/lightModel.js';
 import { analyzeWithClaude } from '../anthropicService.js';
 
-const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
+const HAIKU_MODEL = GRARECO_DETECTION_MODEL;
 const HAIKU_CONFIDENCE_THRESHOLD = 0.7;
 const COOLDOWN_MS = 5 * 60 * 1000;
 

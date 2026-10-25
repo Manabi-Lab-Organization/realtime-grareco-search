@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { siteConfig } from './siteConfig.js';
+import { toEmailAttachmentImage } from './grareco/grarecoImageCompress.js';
 
 const APP_NAME = siteConfig().appName;
 
@@ -225,11 +226,11 @@ export async function sendMeetingMinutesEmail(params: {
   const minutesHtml = convertMinutesToHtml(minutesText);
 
   const attachments: Array<{ filename: string; content: Buffer }> = [];
-  if (grarecoImageBase64) {
-    const base64Data = grarecoImageBase64.replace(/^data:image\/\w+;base64,/, '');
+  const grarecoAttachment = grarecoImageBase64 ? await toEmailAttachmentImage(grarecoImageBase64) : null;
+  if (grarecoAttachment) {
     attachments.push({
-      filename: `${dateStr}_グラレコ_${meetingTitle}.png`,
-      content: Buffer.from(base64Data, 'base64'),
+      filename: `${dateStr}_グラレコ_${meetingTitle}.${grarecoAttachment.extension}`,
+      content: grarecoAttachment.content,
     });
   }
 

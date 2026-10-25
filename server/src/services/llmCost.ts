@@ -1,5 +1,6 @@
 
 export const LLM_PRICE_TABLE: Array<{ match: RegExp; inputPerMtok: number; outputPerMtok: number }> = [
+  { match: /haiku-5/i, inputPerMtok: 0.1, outputPerMtok: 0.5 },
   { match: /haiku/i, inputPerMtok: 1, outputPerMtok: 5 },
   { match: /sonnet-5/i, inputPerMtok: 2, outputPerMtok: 10 },
   { match: /sonnet/i, inputPerMtok: 3, outputPerMtok: 15 },

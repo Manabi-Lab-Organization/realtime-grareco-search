@@ -19,6 +19,6 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "typescript": "^5.7.2",
-    "drizzle-orm": "^0.38.3"
+    "drizzle-orm": "^0.45.4"
   }
 }

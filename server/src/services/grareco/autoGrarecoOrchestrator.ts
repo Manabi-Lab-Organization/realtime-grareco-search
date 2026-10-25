@@ -28,6 +28,7 @@ import {
   generateDiscoverDraft,
 } from './autoGrarecoService.js';
 import { generateGraphicRecording } from '../geminiService.js';
+import { withCompressedGrarecoImage } from './grarecoImageCompress.js';
 import { broadcastToUser } from '../research/connectionRegistry.js';
 import {
   DEFAULT_AUTO_GRARECO_SETTINGS,
@@ -231,7 +232,7 @@ async function promoteToImage(
   const imageInput = draft ? buildImageSourceFromDraft(draft) : row.sourceText;
 
   try {
-    const result = await generateGraphicRecording(imageInput);
+    const result = await withCompressedGrarecoImage(await generateGraphicRecording(imageInput), `auto meeting=${meetingId} rec=${recordingId}`);
     const imageUrl = result.imageUrl;
     await db
       .update(graphicRecordings)

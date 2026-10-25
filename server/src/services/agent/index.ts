@@ -10,8 +10,9 @@ import {
   type ClientAction,
 } from './tools.js';
 import { buildSystemPrompt } from './systemPrompt.js';
+import { DEFAULT_LIGHT_MODEL, lightRequestParams, logIfRefused } from '../llm/lightModel.js';
 
-const MODEL = process.env.NL_AGENT_MODEL || 'claude-haiku-4-5-20251001';
+const MODEL = process.env.NL_AGENT_MODEL || DEFAULT_LIGHT_MODEL;
 const MAX_ITERATIONS = 8;
 const MAX_OUTPUT_TOKENS = 2048;
 
@@ -103,7 +104,7 @@ export async function runAgentTurnStreaming(params: {
 
     const stream = anthropic.messages.stream({
       model: MODEL,
-      max_tokens: MAX_OUTPUT_TOKENS,
+      ...lightRequestParams(MODEL, { maxTokens: MAX_OUTPUT_TOKENS }),
       system: systemBlocks,
       tools,
       messages,
@@ -115,6 +116,7 @@ export async function runAgentTurnStreaming(params: {
 
     const response = await stream.finalMessage();
     lastStop = response.stop_reason ?? null;
+    logIfRefused(response, 'agent', MODEL);
     turnUsage.input += response.usage?.input_tokens ?? 0;
     turnUsage.output += response.usage?.output_tokens ?? 0;
     turnUsage.cache_read += response.usage?.cache_read_input_tokens ?? 0;

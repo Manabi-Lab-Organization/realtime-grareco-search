@@ -36,6 +36,9 @@ import {
   urlsFromWebSearchOutput,
   RESEARCH_BUILTIN_TOOLS,
   RESEARCH_DISALLOWED_TOOLS,
+  ORCHESTRATOR_AGENT_NAME,
+  ORCHESTRATOR_WEBFETCH_DENY_REASON,
+  makeDenyOrchestratorWebFetch,
 } from '../agentSandbox.js';
 import { SUB_AGENTS } from '../managedAgent.js';
 
@@ -282,5 +285,55 @@ describe('調べる対象の範囲', () => {
     expect(prompt).toContain('公人・著名人、企業・団体、製品・サービス、公開された出来事に限る');
     expect(prompt).toContain('会議の参加者や、会議で名前が出た私人');
     expect(prompt).not.toContain('人物のプロフィール');
+  });
+});
+
+describe('司令塔のツールと考える深さ', () => {
+  const base = { agents: { '補足情報': { description: 'd', prompt: 'p', tools: ['WebSearch', 'WebFetch'] } }, systemPrompt: 'sys', model: 'claude-sonnet-5-5', runDir: '/tmp/x' };
+  const signal = new AbortController().signal;
+  const fetchInput = (agent_id?: string) => ({
+    hook_event_name: 'PreToolUse',
+    tool_name: 'WebFetch',
+    tool_input: { url: 'https://example.com/' },
+    session_id: 's', transcript_path: '', cwd: '/tmp',
+    ...(agent_id ? { agent_id } : {}),
+  });
+
+  it('メインの会話に司令塔の定義を当て、既定では調査役を呼ぶツールだけを持たせる', () => {
+    const o = buildResearchQueryOptions(base);
+    expect(o.agent).toBe(ORCHESTRATOR_AGENT_NAME);
+    const def = o.agents![ORCHESTRATOR_AGENT_NAME];
+    expect(def.tools).toEqual(['Agent']);
+    expect(def.prompt).toBe('sys');
+    expect(def.model).toBe('claude-sonnet-5-5');
+    expect(def.permissionMode).toBe('dontAsk');
+    expect(o.agents!['補足情報'].tools).toEqual(['WebSearch', 'WebFetch']);
+  });
+
+  it('司令塔の検索を許したときだけ、司令塔にも WebSearch と WebFetch を持たせる', () => {
+    const o = buildResearchQueryOptions({ ...base, orchestratorWeb: true });
+    expect(o.agents![ORCHESTRATOR_AGENT_NAME].tools).toEqual(['Agent', 'WebSearch', 'WebFetch']);
+    expect(o.hooks?.PreToolUse?.[0].hooks).toHaveLength(1);
+  });
+
+  it('既定では、司令塔の WebFetch をフックでも止める', () => {
+    const o = buildResearchQueryOptions(base);
+    expect(o.hooks?.PreToolUse?.[0].hooks).toHaveLength(2);
+  });
+
+  it('effort を指定したときだけ送る', () => {
+    expect(buildResearchQueryOptions(base).effort).toBeUndefined();
+    expect(buildResearchQueryOptions(base).agents![ORCHESTRATOR_AGENT_NAME].effort).toBeUndefined();
+    const o = buildResearchQueryOptions({ ...base, effort: 'medium' });
+    expect(o.effort).toBe('medium');
+    expect(o.agents![ORCHESTRATOR_AGENT_NAME].effort).toBe('medium');
+  });
+
+  it('メインの会話の WebFetch は拒否し、調査役の WebFetch には判定を返さない', async () => {
+    const hook = makeDenyOrchestratorWebFetch();
+    const main = ((await hook(fetchInput() as any, 't1', { signal })) as any).hookSpecificOutput;
+    expect(main.permissionDecision).toBe('deny');
+    expect(main.permissionDecisionReason).toBe(ORCHESTRATOR_WEBFETCH_DENY_REASON);
+    expect(await hook(fetchInput('agent-1') as any, 't2', { signal })).toEqual({});
   });
 });

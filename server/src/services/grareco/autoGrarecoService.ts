@@ -3,6 +3,7 @@ import { eq, desc, and, gte } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { transcripts, structuredSummaries, researchInsights, meetings } from '../../db/schema.js';
 import { parseNgKeywords, filterNgTranscripts } from '../ngKeywordFilterService.js';
+import { GRARECO_DETECTION_MODEL } from '../llm/lightModel.js';
 import { analyzeWithClaude } from '../anthropicService.js';
 import {
   REFLECT_TRIGGERS,
@@ -11,7 +12,7 @@ import {
   type ResearchInsightRef,
 } from './types.js';
 
-const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
+const HAIKU_MODEL = GRARECO_DETECTION_MODEL;
 const RECENT_WINDOW_MS = 10 * 60 * 1000;
 const MAX_TRANSCRIPT_CHARS = 6000;
 
