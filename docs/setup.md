@@ -253,6 +253,7 @@ GitHub の Releases にデスクトップアプリがまだ出ていないあい
 | `RESEARCH_ENABLED` | `false` にすると、リアルタイム調査を止めます |
 | `RESEARCH_ORCHESTRATOR_MODEL` など | リアルタイム調査で使うモデル。下の「リアルタイム調査のモデル」を見てください |
 | `GRARECO_MANUAL_PROVIDER` | `gemini` にすると、OpenAI のキーがあっても手動グラレコを Gemini で描きます |
+| `GRARECO_WEBP_QUALITY` | グラレコの画像を保存する前に WebP にして軽くするときの品質（1〜100、既定 85）。`0` にすると変換せず、描いたままの形式で保存します。会議の終わりのメールには JPEG で添付し、画面からのダウンロードは PNG で渡します |
 | `OPS_EMAIL` | グラレコの作画が OpenAI から Gemini に切り替わったときに知らせる先のアドレス（メールの設定が要ります） |
 | `AUDIT_R2_*` | 4つそろえると、操作の記録を 1日ごとに Cloudflare R2 へ書き出します |
 | `WEB_SESSION_*`・`TOKEN_*` など | 自動でログアウトするまでの時間などの細かい調整。ふつうは空のままにします |

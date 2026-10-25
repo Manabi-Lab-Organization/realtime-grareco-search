@@ -37,6 +37,7 @@ import { splitTranscriptIntoWindows, windowIndexForElapsed, type TimedLine } fro
 import { buildParticipantsSection } from '../services/grareco/grarecoPrompt.js';
 import { generateManualGrareco } from '../services/grareco/manualGrareco.js';
 import type { GrarecoImageResult } from '../services/grareco/imageOutput.js';
+import { withCompressedGrarecoImage } from '../services/grareco/grarecoImageCompress.js';
 import { sendMeetingMinutesEmail } from '../services/emailService.js';
 import { getDetectedTermsByMeeting, excludeTerm } from '../services/termGlossaryService.js';
 import { foldPausedSet, recordedDurationSeconds } from '../services/recordingMeter.js';
@@ -645,7 +646,7 @@ async function sendMeetingEndEmailFromHttp(
         meetingDate: mtgCheck?.startedAt ? new Date(mtgCheck.startedAt) : endedAt,
         participants: participantsArray,
         meetingType: mtgCheck?.meetingType,
-      }).catch((err) => {
+      }).then((r) => withCompressedGrarecoImage(r, `final meeting=${meetingId}`)).catch((err) => {
         console.error(`[MeetingEmail] グラレコ生成失敗:`, err);
         return undefined;
       }),
@@ -1592,7 +1593,7 @@ router.post('/:id/analyze', meetingAnalysisLimiter, imageJsonBody, async (req, r
 
       const [gr] = await db
         .insert(graphicRecordings)
-        .values({ meetingId, sourceText, imageUrl: result.imageUrl, metadata })
+        .values({ meetingId, sourceText, imageUrl: (await withCompressedGrarecoImage(result, `manual meeting=${meetingId}`)).imageUrl, metadata })
         .returning();
 
       res.status(201).json({
@@ -1730,7 +1731,10 @@ router.post('/:id/graphic-recording/:recordingId/revise', async (req, res, next)
     manualGrarecoInFlight.add(lockKey);
     reviseLockKey = lockKey;
 
-    const revised = await reviseGraphicRecording(original.imageUrl, original.sourceText, instruction);
+    const revised = await withCompressedGrarecoImage(
+      await reviseGraphicRecording(original.imageUrl, original.sourceText, instruction),
+      `revise meeting=${meetingId}`,
+    );
 
     const metadata = {
       ...((original.metadata as Record<string, unknown>) || {}),

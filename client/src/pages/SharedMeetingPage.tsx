@@ -21,6 +21,7 @@ import {
   type PublicGrareco,
 } from '@/lib/publicShare';
 import { grarecoThumbUrl } from '@/lib/grarecoThumb';
+import { fetchImageAsPngBlob } from '@/lib/grarecoPng';
 import { safeHref } from '@/lib/safeHref';
 import { useSiteConfig } from '@/hooks/useSiteConfig';
 
@@ -58,22 +59,7 @@ async function copyImage(
     return;
   }
   try {
-    const res = await fetch(item.imageUrl);
-    const blob = await res.blob();
-    const pngBlob = await new Promise<Blob>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error('canvas error'));
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png');
-      };
-      img.onerror = () => reject(new Error('image load error'));
-      img.src = URL.createObjectURL(blob);
-    });
+    const pngBlob = await fetchImageAsPngBlob(item.imageUrl);
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
     toast({ title: '画像をコピーしました' });
   } catch {
