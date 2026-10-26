@@ -1,7 +1,7 @@
 {
   "name": "electron-app",
   "productName": "Realtime GraReco & Search",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "Apache-2.0",
   "description": "Realtime GraReco & Search - Desktop App",
   "main": "./out/main/index.js",
@@ -42,7 +42,7 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
-    "electron": "44.4.5",
+    "electron": "44.9.3",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "postcss": "^8.4.49",
