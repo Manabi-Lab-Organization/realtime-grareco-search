@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { parseObservationSource, type ObservationSource } from '../lib/observationSource'
 
 const CAPTURE_INTERVAL_MS = 60_000
+const WINDOW_RECOVERY_POLL_MS = 5_000
+const WINDOW_HIDDEN_MESSAGE =
+  '選んだウィンドウが見えないため、観察を一時停止しています。別のデスクトップに切り替えた・最小化した場合は、元に戻すと自動で再開します（閉じた場合はウィンドウを選び直してください）'
+const CAPTURE_TIMEOUT_MESSAGE = '画面の取得に時間がかかっています。自動で再試行しています…'
 const LS_ENABLED = 'roomObservation.enabled'
 const LS_SOURCE = 'roomObservation.source'
 const LS_DEVICE = 'roomObservation.deviceId'
@@ -9,7 +14,7 @@ const LS_WINDOW_NAME = 'roomObservation.windowName'
 const LS_DISPLAYS = 'roomObservation.displayIds'
 
 export type ObservationStatus = 'idle' | 'starting' | 'observing' | 'error'
-export type ObservationSource = 'camera' | 'window' | 'display'
+export type { ObservationSource }
 
 export interface CameraDevice {
   deviceId: string
@@ -65,7 +70,7 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
     () => localStorage.getItem(LS_ENABLED) === '1',
   )
   const [source, setSourceState] = useState<ObservationSource>(
-    () => (localStorage.getItem(LS_SOURCE) === 'window' ? 'window' : 'camera'),
+    () => parseObservationSource(localStorage.getItem(LS_SOURCE)),
   )
   const [deviceId, setDeviceIdState] = useState<string>(
     () => localStorage.getItem(LS_DEVICE) || '',
@@ -89,6 +94,7 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
   const [displays, setDisplays] = useState<DisplaySource[]>([])
   const [status, setStatus] = useState<ObservationStatus>('idle')
   const [lastError, setLastError] = useState<string | null>(null)
+  const [windowHidden, setWindowHidden] = useState(false)
 
   const streamRef = useRef<MediaStream | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -101,6 +107,8 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
   const rvfcSupportedRef = useRef(false)
   const restartingRef = useRef(false)
   const restartCameraRef = useRef<() => Promise<void>>(async () => {})
+  const windowRecoverTimerRef = useRef<number | null>(null)
+  const captureOnceRef = useRef<() => Promise<void>>(async () => {})
 
   const setEnabled = useCallback((v: boolean) => {
     setEnabledState(v)
@@ -254,6 +262,33 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
     restartCameraRef.current = restartCamera
   }, [restartCamera])
 
+  const stopWindowRecovery = useCallback(() => {
+    if (windowRecoverTimerRef.current !== null) {
+      window.clearInterval(windowRecoverTimerRef.current)
+      windowRecoverTimerRef.current = null
+    }
+  }, [])
+
+  const startWindowRecovery = useCallback(() => {
+    if (windowRecoverTimerRef.current !== null) return
+    let probing = false
+    windowRecoverTimerRef.current = window.setInterval(() => {
+      if (probing) return
+      probing = true
+      void window.electronAPI
+        .isWindowVisible(windowId, windowName)
+        .then(async (r) => {
+          if (!r.visible || windowRecoverTimerRef.current === null) return
+          stopWindowRecovery()
+          await captureOnceRef.current()
+        })
+        .catch(() => {})
+        .finally(() => {
+          probing = false
+        })
+    }, WINDOW_RECOVERY_POLL_MS)
+  }, [windowId, windowName, stopWindowRecovery])
+
   const captureCameraFrame = useCallback((): string | null => {
     const video = videoRef.current
     if (!video || video.videoWidth === 0) return null
@@ -328,9 +363,17 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
       } else {
         const shot = await window.electronAPI.captureWindowShot(windowId, windowName)
         if (!shot.ok) {
-          setLastError(shot.error === 'window_not_found' ? 'ウィンドウが見つかりません（閉じられた可能性）' : shot.error)
+          if (shot.error === 'window_not_found' || shot.error === 'capture_timeout') {
+            setWindowHidden(shot.error === 'window_not_found')
+            setLastError(shot.error === 'window_not_found' ? WINDOW_HIDDEN_MESSAGE : CAPTURE_TIMEOUT_MESSAGE)
+            startWindowRecovery()
+          } else {
+            setLastError(shot.error)
+          }
           return
         }
+        stopWindowRecovery()
+        setWindowHidden(false)
         dataUrl = shot.dataUrl
       }
       if (!dataUrl) return
@@ -342,7 +385,21 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
     } finally {
       busyRef.current = false
     }
-  }, [currentMeetingId, source, windowId, windowName, selectedDisplayIds, captureCameraFrame, restartCamera, refreshDisplays])
+  }, [
+    currentMeetingId,
+    source,
+    windowId,
+    windowName,
+    selectedDisplayIds,
+    captureCameraFrame,
+    restartCamera,
+    refreshDisplays,
+    startWindowRecovery,
+    stopWindowRecovery,
+  ])
+  useEffect(() => {
+    captureOnceRef.current = captureOnce
+  }, [captureOnce])
 
   useEffect(() => {
     let cancelled = false
@@ -388,6 +445,8 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
         intervalRef.current = null
       }
       stopCameraStream()
+      stopWindowRecovery()
+      setWindowHidden(false)
       locationRef.current = undefined
       setStatus('idle')
     }
@@ -417,6 +476,7 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
     refreshDevices,
     startCameraStream,
     stopCameraStream,
+    stopWindowRecovery,
   ])
 
   return {
@@ -439,5 +499,6 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
     toggleDisplay,
     status,
     lastError,
+    windowHidden,
   }
 }

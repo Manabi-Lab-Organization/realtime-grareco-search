@@ -140,6 +140,8 @@ const api = {
     windowName?: string
   ): Promise<{ ok: true; dataUrl: string; name: string } | { ok: false; error: string }> =>
     ipcRenderer.invoke('capture:windowShot', windowId, windowName),
+  isWindowVisible: (windowId: string, windowName?: string): Promise<{ visible: boolean }> =>
+    ipcRenderer.invoke('capture:windowVisible', windowId, windowName),
 
   getScreenshotShortcut: (): Promise<string> => ipcRenderer.invoke('shortcut:get'),
   setScreenshotShortcut: (accel: string): Promise<{ ok: boolean; error?: string }> =>

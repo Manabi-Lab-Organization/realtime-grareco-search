@@ -1,7 +1,7 @@
 {
   "name": "electron-app",
   "productName": "Realtime GraReco & Search",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "license": "Apache-2.0",
   "description": "Realtime GraReco & Search - Desktop App",
   "main": "./out/main/index.js",
@@ -12,7 +12,8 @@
     "postinstall": "electron-builder install-app-deps",
     "build:win": "npm run build && electron-builder --win --config",
     "build:mac": "npm run build && electron-builder --mac --config",
-    "build:linux": "npm run build && electron-builder --linux --config"
+    "build:linux": "npm run build && electron-builder --linux --config",
+    "test": "vitest run test/unit"
   },
   "thirdPartyNotices": {
     "include": [

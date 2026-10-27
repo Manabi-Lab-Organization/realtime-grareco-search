@@ -118,6 +118,7 @@ export interface ElectronAPI {
     windowId: string,
     windowName?: string
   ): Promise<{ ok: true; dataUrl: string; name: string } | { ok: false; error: string }>
+  isWindowVisible(windowId: string, windowName?: string): Promise<{ visible: boolean }>
 
   setCompactMode(): Promise<void>
   setExpandedMode(): Promise<void>
