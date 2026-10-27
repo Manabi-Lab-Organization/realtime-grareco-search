@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { parseObservationSource, type ObservationSource } from '../lib/observationSource'
 
 const CAPTURE_INTERVAL_MS = 60_000
-const WINDOW_RECOVERY_POLL_MS = 5_000
+const WINDOW_RECOVERY_POLL_MS = 3_000
 const WINDOW_HIDDEN_MESSAGE =
   '選んだウィンドウが見えないため、観察を一時停止しています。別のデスクトップに切り替えた・最小化した場合は、元に戻すと自動で再開します（閉じた場合はウィンドウを選び直してください）'
 const CAPTURE_TIMEOUT_MESSAGE = '画面の取得に時間がかかっています。自動で再試行しています…'
@@ -374,6 +374,7 @@ export function useRoomObservation({ isRecording, currentMeetingId, available }:
         }
         stopWindowRecovery()
         setWindowHidden(false)
+        setLastError(null)
         dataUrl = shot.dataUrl
       }
       if (!dataUrl) return
