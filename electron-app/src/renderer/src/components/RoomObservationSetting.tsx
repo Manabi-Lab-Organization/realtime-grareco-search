@@ -27,6 +27,7 @@ interface Props {
   toggleDisplay: (displayId: string) => void
   status: ObservationStatus
   lastError: string | null
+  windowHidden?: boolean
   notice?: string | null
 }
 
@@ -50,6 +51,7 @@ export function RoomObservationSetting({
   toggleDisplay,
   status,
   lastError,
+  windowHidden,
   notice,
 }: Props): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -71,7 +73,7 @@ export function RoomObservationSetting({
           {status === 'observing' && lastError && (
             <span className="inline-flex items-center gap-1 text-[10px] text-amber-600">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              映像が取得できていません
+              {windowHidden ? 'ウィンドウが見えないため一時停止中（戻すと自動で再開）' : '映像が取得できていません'}
             </span>
           )}
         </span>

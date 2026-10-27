@@ -44,6 +44,7 @@ import {
 } from './apiClient'
 import { hostname } from 'os'
 import { normalizeServerInput, checkServerInfo } from './serverUrl'
+import { findWindowSource, withTimeout } from './windowSource'
 import { net } from 'electron'
 
 async function mintDesktopExchangeCode(): Promise<string> {
@@ -958,14 +959,32 @@ function setupIPC(): void {
   })
 
   ipcMain.handle('capture:windowShot', async (_event, windowId: string, windowName?: string) => {
-    const sources = await desktopCapturer.getSources({
-      types: ['window'],
-      thumbnailSize: { width: 1920, height: 1200 }
-    })
-    let match = sources.find((s) => s.id === windowId)
-    if (!match && windowName) match = sources.find((s) => s.name === windowName)
-    if (!match) return { ok: false, error: 'window_not_found' }
+    let sources: Electron.DesktopCapturerSource[]
+    try {
+      sources = await withTimeout(
+        desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1200 } }),
+        15_000,
+        'capture_timeout'
+      )
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'capture_error' }
+    }
+    const match = findWindowSource(sources, windowId, windowName)
+    if (!match || match.thumbnail.isEmpty()) return { ok: false, error: 'window_not_found' }
     return { ok: true, dataUrl: match.thumbnail.toDataURL(), name: match.name }
+  })
+
+  ipcMain.handle('capture:windowVisible', async (_event, windowId: string, windowName?: string) => {
+    try {
+      const sources = await withTimeout(
+        desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } }),
+        10_000,
+        'capture_timeout'
+      )
+      return { visible: !!findWindowSource(sources, windowId, windowName) }
+    } catch {
+      return { visible: false }
+    }
   })
 
   ipcMain.handle('api:postRoomObservationConsent', async (_event, version: number) => {

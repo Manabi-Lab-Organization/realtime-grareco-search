@@ -821,6 +821,7 @@ export default function App() {
       selectedDisplayIds={roomObservation.selectedDisplayIds}
       toggleDisplay={roomObservation.toggleDisplay}
       status={roomObservation.status}
+      windowHidden={roomObservation.windowHidden}
       lastError={
         roomObservation.lastError === ROOM_OBSERVATION_CONSENT_REQUIRED ? null : roomObservation.lastError
       }
