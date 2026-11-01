@@ -35,6 +35,7 @@ import { audit, auditAuthFailure } from '../services/audit/audit.js';
 import { tokenLast4 } from '../services/audit/logSafety.js';
 import { authUserId, getAuth } from '../middleware/authContext.js';
 import { INVITE_VERIFIED_FOR_CLIENTS } from '../middleware/inviteVerified.js';
+import { deviceClientTypeFromBody } from '../middleware/appTokenRequest.js';
 import { serverFeatures } from '../services/features.js';
 import { issueInitialSetupCode } from '../services/initialSetupCode.js';
 
@@ -320,6 +321,13 @@ router.get('/token', requireAuth, async (req, res, next) => {
 router.post('/token', requireAuth, requireRecentAuth, async (req, res, next) => {
   try {
     const userId = authUserId(req);
+    if (deviceClientTypeFromBody(req.body)) {
+      const extras = readAppLoginExtras(req);
+      const { token, id: tokenId } = await issueAppToken(userId, extras);
+      await audit('token.issue', { target: { type: 'api_token', id: tokenId }, detail: { via: 'app-browser-login', clientType: extras.clientType, deviceName: extras.deviceName, clientVersion: extras.clientVersion, reloginReason: extras.reloginReason, tokenLast4: tokenLast4(token) } }, req);
+      res.json({ token });
+      return;
+    }
     await revokeTokensOfType(userId, 'api', 'rotated');
     const { token: newToken, id } = await issueApiToken(userId, { clientType: 'api', deviceName: '外部連携用 API トークン' });
     await audit('token.issue', { target: { type: 'api_token', id }, detail: { via: 'settings', rotated: true, clientType: 'api', tokenLast4: tokenLast4(newToken) } }, req);
