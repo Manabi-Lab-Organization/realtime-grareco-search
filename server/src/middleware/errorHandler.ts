@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { ZodError } from 'zod';
 import { AppError, BadRequestError } from '../errors/AppError.js';
+import { stripQueryParams } from '../db/queryError.js';
 
 function sanitizeBody(body: unknown): unknown {
   if (!body || typeof body !== 'object') return body;
@@ -87,9 +88,10 @@ export function errorHandler(
     return;
   }
 
+  const unhandled = stripQueryParams(err);
   console.error(`[${requestId}] Unhandled error:`, {
-    message: err.message,
-    stack: err.stack,
+    message: unhandled.message,
+    stack: unhandled.stack,
     path: req.path,
     method: req.method,
     userId,
@@ -103,8 +105,8 @@ export function errorHandler(
     });
   } else {
     res.status(500).json({
-      error: err.message,
-      stack: err.stack,
+      error: unhandled.message,
+      stack: unhandled.stack,
       requestId,
     });
   }
