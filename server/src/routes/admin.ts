@@ -3,6 +3,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { eq, sql, desc, and, inArray, gte } from 'drizzle-orm';
 import { db } from '../db/index.js';
+import { isUniqueViolation } from '../db/queryError.js';
 import {
   users,
   meetings,
@@ -309,7 +310,7 @@ router.post('/invite-codes', async (req, res, next) => {
     });
     res.status(201).json(created);
   } catch (err: any) {
-    if (err?.code === '23505') {
+    if (isUniqueViolation(err)) {
       res.status(409).json({ error: 'duplicate_code', message: 'このコードはすでに存在します' });
       return;
     }
