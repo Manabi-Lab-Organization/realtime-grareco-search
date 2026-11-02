@@ -98,3 +98,17 @@ describe('グラレコの手動の作成の窓口', () => {
     expect((await blocked.json()).error).toContain('10分ほど待ってから');
   });
 });
+
+describe('手動の調査の窓口', () => {
+  it('会議が違っても、利用者ごとに 10 分で 10 回までに止める', async () => {
+    selectRows.mockResolvedValue([]);
+    const allowed: number[] = [];
+    for (let id = 1; id <= 10; id++) {
+      allowed.push(...await statusesFor(`/${id}/manual-research`, { summarySections: [] }, 1));
+    }
+    expect(allowed.every((s) => s === 404)).toBe(true);
+    const blocked = await post('/11/manual-research', { summarySections: [] });
+    expect(blocked.status).toBe(429);
+    expect((await blocked.json()).error).toContain('10分ほど待ってから');
+  });
+});
