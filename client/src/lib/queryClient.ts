@@ -1,6 +1,7 @@
 import { QueryClient, QueryFunction, MutationCache } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 import { fetchWithReauth } from './reauth';
+import { apiErrorText } from './apiError';
 
 const defaultQueryFn: QueryFunction = async ({ queryKey }) => {
   const url = queryKey[0] as string;
@@ -16,8 +17,7 @@ const defaultQueryFn: QueryFunction = async ({ queryKey }) => {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    if (body.code && body.message) throw new Error(body.message);
-    throw new Error(body.error || `HTTP ${res.status}`);
+    throw new Error(apiErrorText(body, res.status));
   }
 
   if (res.status === 204) return null;
@@ -61,7 +61,7 @@ export async function apiRequest(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    throw new Error(apiErrorText(body, res.status));
   }
 
   return res;

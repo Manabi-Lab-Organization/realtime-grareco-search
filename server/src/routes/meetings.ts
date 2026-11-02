@@ -16,6 +16,7 @@ import {
   meetingAnalysisLimiter,
   grarecoReviseLimiter,
   grarecoManualTriggerLimiter,
+  manualResearchLimiter,
 } from '../middleware/rateLimit.js';
 import { imageJsonBody } from '../middleware/bodyLimits.js';
 import { uploadImageData, uploadImageMimeType } from '../services/uploadImageTypes.js';
@@ -805,7 +806,7 @@ const manualResearchSchema = z.object({
 const lastManualResearchAt = new Map<string, number>();
 const MANUAL_RESEARCH_COOLDOWN_MS = 60 * 1000;
 
-router.post('/:id/manual-research', async (req, res, next) => {
+router.post('/:id/manual-research', manualResearchLimiter, async (req, res, next) => {
   try {
     const meetingId = Number(req.params.id);
     const userId = authUserId(req);

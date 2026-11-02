@@ -127,6 +127,8 @@ export const grarecoReviseLimiter = aiFeatureLimiter(10, 20);
 
 export const grarecoManualTriggerLimiter = aiFeatureLimiter(10, 20);
 
+export const manualResearchLimiter = aiFeatureLimiter(10, 10);
+
 export const passwordResetLimiter: RateLimitRequestHandler = rateLimit({
   handler: rateLimitHitHandler('passwordReset'),
   windowMs: 15 * 60 * 1000,
