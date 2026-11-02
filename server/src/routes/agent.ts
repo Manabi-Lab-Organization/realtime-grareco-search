@@ -16,6 +16,7 @@ import {
 } from '../services/agent/index.js';
 import { attachAndAnalyzeImage } from '../services/agent/imageAttachService.js';
 import { authUserId } from '../middleware/authContext.js';
+import { publicErrorMessage } from '../db/queryError.js';
 
 const router = Router();
 
@@ -91,7 +92,7 @@ router.post('/meetings/:id/chat', meetingAssistantLimiter, async (req, res, next
         },
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = publicErrorMessage(err);
       console.error('[agent:stream] error:', err);
       if (!aborted) sendEvent({ type: 'error', error: msg });
     } finally {
