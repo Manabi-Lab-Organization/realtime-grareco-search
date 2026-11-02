@@ -1,4 +1,5 @@
 import { fetchWithReauth } from './reauth';
+import { apiErrorText } from './apiError';
 
 const BASE_URL = '/api';
 
@@ -65,8 +66,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    if (body.code && body.message) throw new Error(body.message);
-    throw new Error(body.error || `HTTP ${res.status}`);
+    throw new Error(apiErrorText(body, res.status));
   }
 
   if (res.status === 204) return undefined as T;
