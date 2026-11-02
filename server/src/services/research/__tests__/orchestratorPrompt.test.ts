@@ -35,6 +35,10 @@ describe('司令塔の指示', () => {
     expect(prompt).toContain('会議の参加者や、会議で名前が出た私人');
   });
 
+  it('公人と判断できない人は私人として扱うと伝える', () => {
+    expect(prompt).toContain('公人かどうか判断できない人は、私人とみなして調べない');
+  });
+
   it('既定では司令塔は自分で検索せず、許したときだけ検索できると伝える', () => {
     expect(prompt).toContain('あなたは自分では検索もページの取得もしません');
     expect(buildFilteredOrchestratorPrompt(DEFAULT_RESEARCH_SETTINGS, true)).toContain('自分でも WebSearch・WebFetch を使えます');

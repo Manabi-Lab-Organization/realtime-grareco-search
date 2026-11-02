@@ -14,6 +14,8 @@ import {
   imageAnalysisLimiter,
   participantReprofileLimiter,
   meetingAnalysisLimiter,
+  grarecoReviseLimiter,
+  grarecoManualTriggerLimiter,
 } from '../middleware/rateLimit.js';
 import { imageJsonBody } from '../middleware/bodyLimits.js';
 import { uploadImageData, uploadImageMimeType } from '../services/uploadImageTypes.js';
@@ -889,7 +891,7 @@ const manualGrarecoTriggerSchema = z.object({
 const lastManualGrarecoAt = new Map<string, number>();
 const MANUAL_GRARECO_COOLDOWN_MS = 30 * 1000;
 
-router.post('/:id/grareco/manual-trigger', async (req, res, next) => {
+router.post('/:id/grareco/manual-trigger', grarecoManualTriggerLimiter, async (req, res, next) => {
   try {
     const meetingId = Number(req.params.id);
     const userId = authUserId(req);
@@ -1691,7 +1693,7 @@ router.get('/:id/grareco/:recordingId/image', async (req, res, next) => {
   }
 });
 
-router.post('/:id/graphic-recording/:recordingId/revise', async (req, res, next) => {
+router.post('/:id/graphic-recording/:recordingId/revise', grarecoReviseLimiter, async (req, res, next) => {
   let reviseLockKey: string | null = null;
   try {
     const meetingId = Number(req.params.id);
@@ -1714,7 +1716,7 @@ router.post('/:id/graphic-recording/:recordingId/revise', async (req, res, next)
     }
 
     const { instruction } = z.object({
-      instruction: z.string().min(2),
+      instruction: z.string().min(2).max(2000, '修正の指示は 2000 文字以内で入力してください'),
     }).parse(req.body);
 
     if (!original.imageUrl) {

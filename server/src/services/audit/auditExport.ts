@@ -130,6 +130,15 @@ export async function runAuditExportOnce(opts: { now?: Date; put?: PutFn; retent
           );
           (outcome === 'created' ? result.exported : result.skipped).push(day);
           console.log(JSON.stringify({ type: 'audit_export', day, key, rows: rows.length, outcome }));
+          if (outcome === 'exists') {
+            console.warn(JSON.stringify({
+              type: 'audit_export_not_saved',
+              day,
+              key,
+              rows: rows.length,
+              message: '同じ場所に記録が既にあるため、この日の記録は保存しませんでした。同じバケットを別の環境でも使っているときは AUDIT_R2_ENV を別々の名前にしてください',
+            }));
+          }
         }
       }
 

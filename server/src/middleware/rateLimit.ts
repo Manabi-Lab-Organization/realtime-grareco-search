@@ -123,6 +123,10 @@ export const meetingAssistantLimiter = aiFeatureLimiter(10, 60);
 
 export const grarecoSearchLimiter = aiFeatureLimiter(10, 60);
 
+export const grarecoReviseLimiter = aiFeatureLimiter(10, 20);
+
+export const grarecoManualTriggerLimiter = aiFeatureLimiter(10, 20);
+
 export const passwordResetLimiter: RateLimitRequestHandler = rateLimit({
   handler: rateLimitHitHandler('passwordReset'),
   windowMs: 15 * 60 * 1000,

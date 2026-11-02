@@ -5,6 +5,11 @@ import sharp from 'sharp';
 
 const DATA_URL_RE = /^data:(image\/[\w.+-]+);base64,(.+)$/s;
 
+function setImageSafetyHeaders(res: Response): void {
+  res.set('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox");
+  res.set('X-Content-Type-Options', 'nosniff');
+}
+
 export function sendGrarecoImage(req: Request, res: Response, imageUrl: string | null): void {
   if (!imageUrl) {
     res.status(404).json({ error: '画像がありません' });
@@ -21,8 +26,7 @@ export function sendGrarecoImage(req: Request, res: Response, imageUrl: string |
     return;
   }
   res.set('Content-Type', m[1]);
-  res.set('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox");
-  res.set('X-Content-Type-Options', 'nosniff');
+  setImageSafetyHeaders(res);
   res.set('ETag', etag);
   res.set('Cache-Control', 'private, no-cache');
   res.send(Buffer.from(m[2], 'base64'));
@@ -66,6 +70,7 @@ export async function sendGrarecoThumbnail(
     if (thumbCache.size > THUMB_CACHE_MAX) thumbCache.delete(thumbCache.keys().next().value!);
   }
   res.set('Content-Type', 'image/webp');
+  setImageSafetyHeaders(res);
   res.set('ETag', etag);
   res.set('Cache-Control', 'private, no-cache');
   res.send(thumb);
