@@ -11,6 +11,7 @@ import {
 } from './tools.js';
 import { buildSystemPrompt } from './systemPrompt.js';
 import { DEFAULT_LIGHT_MODEL, lightRequestParams, logIfRefused } from '../llm/lightModel.js';
+import { publicErrorMessage } from '../../db/queryError.js';
 
 const MODEL = process.env.NL_AGENT_MODEL || DEFAULT_LIGHT_MODEL;
 const MAX_ITERATIONS = 8;
@@ -177,7 +178,7 @@ export async function runAgentTurnStreaming(params: {
         toolLog.push(entry);
         params.onEvent({ type: 'tool', entry });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = publicErrorMessage(err);
         const entry: ToolLogEntry = {
           name: tool.name,
           displayLabel: `${tool.name} 失敗`,
