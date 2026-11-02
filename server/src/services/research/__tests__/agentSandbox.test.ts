@@ -286,6 +286,11 @@ describe('調べる対象の範囲', () => {
     expect(prompt).toContain('会議の参加者や、会議で名前が出た私人');
     expect(prompt).not.toContain('人物のプロフィール');
   });
+
+  it('補足情報の担当は、公人と判断できない人を私人として扱う', () => {
+    const prompt = (SUB_AGENTS as Record<string, { prompt: string }>)['補足情報'].prompt;
+    expect(prompt).toContain('公人かどうか判断できない人は、私人とみなして調べない');
+  });
 });
 
 describe('司令塔のツールと考える深さ', () => {
