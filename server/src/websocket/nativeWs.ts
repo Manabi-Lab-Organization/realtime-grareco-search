@@ -266,7 +266,7 @@ async function sendMeetingEndEmail(meetingId: number, userId: number, title: str
           return '議事録の自動生成に失敗しました。サマリーページをご確認ください。';
         }
       ),
-      !serverFeatures().grareco ? Promise.resolve(undefined) : generateManualGrareco(grarecoSourceText, undefined, generateGraphicRecording, {
+      !serverFeatures().meetingEndGrareco ? Promise.resolve(undefined) : generateManualGrareco(grarecoSourceText, undefined, generateGraphicRecording, {
         summary: summaryContent,
         material: sourceText,
         meetingDate: mtgCheck?.startedAt ? new Date(mtgCheck.startedAt) : endedAt,

@@ -112,4 +112,14 @@ describe('serverFeatures', () => {
     const f = serverFeatures({ ANTHROPIC_API_KEY: 'x', GEMINI_API_KEY: 'x', RESEARCH_ENABLED: 'false' } as NodeJS.ProcessEnv);
     expect(f).toMatchObject({ grareco: true, autoGrareco: true, grarecoSearch: true, research: false });
   });
+
+  it('会議終了時のグラレコは、画像のキーがあれば既定で作り、設定で止められる', () => {
+    expect(serverFeatures({ GEMINI_API_KEY: 'x' } as NodeJS.ProcessEnv).meetingEndGrareco).toBe(true);
+    expect(serverFeatures({ OPENAI_API_KEY: 'x' } as NodeJS.ProcessEnv).meetingEndGrareco).toBe(true);
+    expect(serverFeatures({ GEMINI_API_KEY: 'x', MEETING_END_GRARECO_ENABLED: 'false' } as NodeJS.ProcessEnv)).toMatchObject({
+      grareco: true,
+      meetingEndGrareco: false,
+    });
+    expect(serverFeatures({ MEETING_END_GRARECO_ENABLED: 'true' } as NodeJS.ProcessEnv).meetingEndGrareco).toBe(false);
+  });
 });

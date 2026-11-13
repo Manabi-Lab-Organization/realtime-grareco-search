@@ -2,6 +2,7 @@ import { hasGeminiKey } from './llm/genaiClient.js';
 
 export interface ServerFeatures {
   grareco: boolean;
+  meetingEndGrareco: boolean;
   autoGrareco: boolean;
   grarecoSearch: boolean;
   research: boolean;
@@ -24,6 +25,7 @@ export function serverFeatures(env: NodeJS.ProcessEnv = process.env): ServerFeat
   const anthropic = !!env.ANTHROPIC_API_KEY;
   return {
     grareco: gemini || openai,
+    meetingEndGrareco: (gemini || openai) && env.MEETING_END_GRARECO_ENABLED !== 'false',
     autoGrareco: gemini,
     grarecoSearch: gemini,
     research: anthropic && env.RESEARCH_ENABLED !== 'false',
@@ -45,6 +47,7 @@ export function logFeatureSummary(): void {
     missing.push('GEMINI_API_KEY が未設定：要約などは Claude で代わりに行います。自動グラレコとグラレコ検索は使えません');
   }
   if (!f.grareco) missing.push('GEMINI_API_KEY も OPENAI_API_KEY も未設定：グラレコ（画像）は使えません');
+  else if (!f.meetingEndGrareco) missing.push('MEETING_END_GRARECO_ENABLED=false：会議の終わりにグラレコを作りません（議事録のメールは送ります）');
   if (!f.email) missing.push('RESEND_API_KEY が未設定：メールは送りません（パスワードの再設定は管理者が行います）');
   for (const m of missing) console.warn(`[Features] ${m}`);
   console.log(`[Features] ${JSON.stringify(f)}`);
