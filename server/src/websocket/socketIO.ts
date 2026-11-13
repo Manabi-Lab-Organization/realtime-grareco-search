@@ -19,7 +19,7 @@ import { recordingMsForNewTranscript } from '../services/recordingClock.js';
 import { markAudioReceived } from '../services/audioWatchdog.js';
 import { acquireRecording, registerRecording, releaseRecording, pauseRecording, getActiveRecording, markMeetingEnded, wasRecentlyEndedByOther, clearRecentEnd, type ActiveRecording, type ConnectionType } from './meetingRegistry.js';
 import { issueAudioToken } from './browserAudioWs.js';
-import { onFinalTranscript, cleanupResearch, fetchUserResearchSettings } from '../services/research/managedAgent.js';
+import { onFinalTranscript, cleanupResearch, fetchUserResearchSettingsIfReadable } from '../services/research/managedAgent.js';
 import { maybeTriggerInitialProfile, clearMeetingProfileState } from '../services/participantProfileTrigger.js';
 import { registerConnection, unregisterConnection, broadcastToUser } from '../services/research/connectionRegistry.js';
 import { processFinalTranscript as autoGrarecoOnTranscript, cleanupAutoGrareco } from '../services/grareco/autoGrarecoOrchestrator.js';
@@ -441,8 +441,8 @@ export function setupSocketIO(httpServer: HTTPServer): SocketIOServer {
 
     void (async () => {
       try {
-        const settings = await fetchUserResearchSettings(userId);
-        socket.emit('research_settings_updated', settings);
+        const settings = await fetchUserResearchSettingsIfReadable(userId);
+        if (settings) socket.emit('research_settings_updated', settings);
       } catch (e) {
         console.error('[SocketIO] initial research settings push failed:', e instanceof Error ? e.message : String(e));
       }

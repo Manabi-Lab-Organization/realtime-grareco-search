@@ -17,6 +17,7 @@ import {
   grarecoReviseLimiter,
   grarecoManualTriggerLimiter,
   manualResearchLimiter,
+  bulkDeleteLimiter,
 } from '../middleware/rateLimit.js';
 import { imageJsonBody } from '../middleware/bodyLimits.js';
 import { uploadImageData, uploadImageMimeType } from '../services/uploadImageTypes.js';
@@ -76,6 +77,12 @@ const router = Router();
 
 router.use(requireAuth);
 
+// 配列の要素数の上限。要素の検証より先に弾き、不正な要素が大量にある配列で検証エラーがメモリを使い切るのを防ぐ
+const BULK_DELETE_MAX_IDS = 1000;
+const PARTICIPANTS_MAX = 2000;
+const SHARE_EXCLUDED_ITEMS_MAX = 2000;
+const SHARED_CONTENT_TYPES = ['glossary', 'research', 'grareco', 'summary'] as const;
+
 const createMeetingSchema = z.object({
   title: z.string().optional(),
   platform: z.enum(['zoom', 'meet', 'teams', 'webex', 'web-recorder', 'unknown']).optional(),
@@ -84,7 +91,7 @@ const createMeetingSchema = z.object({
 const updateMeetingSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   isTitleEdited: z.boolean().optional(),
-  participants: z.array(z.any()).optional(),
+  participants: z.array(z.any()).max(PARTICIPANTS_MAX).optional(),
 });
 
 interface SupplementaryItem {
@@ -266,9 +273,9 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.post('/bulk-delete', async (req, res, next) => {
+router.post('/bulk-delete', bulkDeleteLimiter, async (req, res, next) => {
   try {
-    const { ids } = z.object({ ids: z.array(z.number()) }).parse(req.body);
+    const { ids } = z.object({ ids: z.array(z.number()).max(BULK_DELETE_MAX_IDS, `一度に削除できるのは ${BULK_DELETE_MAX_IDS} 件までです`) }).parse(req.body);
     if (ids.length === 0) {
       res.json({ deleted: 0 });
       return;
@@ -390,12 +397,12 @@ router.patch('/:id/share', async (req, res, next) => {
     }
     const body = z
       .object({
-        sharedContents: z.array(z.enum(['glossary', 'research', 'grareco', 'summary'])).optional(),
+        sharedContents: z.array(z.enum(SHARED_CONTENT_TYPES)).max(SHARED_CONTENT_TYPES.length).optional(),
         excludedItems: z
           .object({
-            research: z.array(z.string()).optional(),
-            grareco: z.array(z.string()).optional(),
-            glossary: z.array(z.string()).optional(),
+            research: z.array(z.string()).max(SHARE_EXCLUDED_ITEMS_MAX).optional(),
+            grareco: z.array(z.string()).max(SHARE_EXCLUDED_ITEMS_MAX).optional(),
+            glossary: z.array(z.string()).max(SHARE_EXCLUDED_ITEMS_MAX).optional(),
             summary: z
               .array(
                 z.union([
@@ -403,6 +410,7 @@ router.patch('/:id/share', async (req, res, next) => {
                   z.object({ heading: z.string() }),
                 ]),
               )
+              .max(SHARE_EXCLUDED_ITEMS_MAX)
               .optional(),
           })
           .optional(),
@@ -1214,7 +1222,7 @@ router.get('/:id/participants', async (req, res, next) => {
 router.put('/:id/participants', async (req, res, next) => {
   try {
     const meetingId = Number(req.params.id);
-    const { participants } = z.object({ participants: z.array(z.any()) }).parse(req.body);
+    const { participants } = z.object({ participants: z.array(z.any()).max(PARTICIPANTS_MAX) }).parse(req.body);
 
     const meeting = await getMeetingOrFail(meetingId, authUserId(req));
     if (!meeting) {
