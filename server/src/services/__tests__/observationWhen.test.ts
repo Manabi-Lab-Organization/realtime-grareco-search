@@ -1,15 +1,42 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-vi.mock('../../db/index.js', () => ({ db: {}, pool: {} }));
-vi.mock('../geminiService.js', () => ({
+const state = vi.hoisted(() => ({ inserted: [] as Record<string, unknown>[] }));
+
+vi.mock('../../db/index.js', () => {
+  const make = (): unknown => {
+    const chain: unknown = new Proxy(function () {}, {
+      get: (_t, prop) => {
+        if (prop === 'then') return (resolve: (rows: unknown[]) => void) => resolve([]);
+        if (prop === 'values') return (v: Record<string, unknown>) => {
+          state.inserted.push(v);
+          return { returning: async () => [{ id: 1, ...v }] };
+        };
+        return () => chain;
+      },
+      apply: () => chain,
+    });
+    return chain;
+  };
+  return { db: make(), pool: {} };
+});
+
+const gemini = vi.hoisted(() => ({
   analyzeRoomObservation: vi.fn(),
   analyzeRoomObservationMultiView: vi.fn(),
   consolidateMaterials: vi.fn(),
 }));
+vi.mock('../geminiService.js', () => gemini);
 vi.mock('../meetingImageService.js', () => ({ insertSupplementaryText: vi.fn() }));
 
-const { formatCapturedAtJst } = await import('../observationService.js');
+const { formatCapturedAtJst, processObservation } = await import('../observationService.js');
+
+beforeEach(() => {
+  state.inserted = [];
+  gemini.analyzeRoomObservation.mockReset();
+  vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+});
 
 describe('環境観察の「いつ」', () => {
   it('取得時刻を日本時間で書く（世界標準時の日付をまたぐときも）', () => {
@@ -17,11 +44,29 @@ describe('環境観察の「いつ」', () => {
     expect(formatCapturedAtJst(new Date('2030-06-10T03:00:00Z'))).toBe('2030-06-10 12:00:00（日本時間）');
   });
 
-  it('AI には時刻を渡さず、結果の when はプログラムで入れる', () => {
-    const src = readFileSync(new URL('../observationService.ts', import.meta.url), 'utf-8');
-    expect(src).toContain('result.fiveW1H.when = capturedAtText;');
-    expect(src).not.toMatch(/analyzeRoomObservation(MultiView)?\([^)]*capturedAtText/s);
-  });
+  for (const sourceType of ['camera', 'window'] as const) {
+    it(`${sourceType}: AI には時刻を渡さず、AI が書いた when はプログラムの日本時間で置き換える`, async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2030-01-31T15:04:05Z'));
+      try {
+        gemini.analyzeRoomObservation.mockResolvedValue({
+          peopleCount: 2,
+          fiveW1H: { when: '2024-01-01 09:00（AI の推測）', where: '会議室', who: null, what: null, why: null, how: null },
+          people: [],
+          rawSummary: 'x',
+          materials: null,
+        });
+        await processObservation(1, null, { data: 'bm90LWFuLWltYWdl', mimeType: 'image/jpeg', sourceType });
+        const ctx = gemini.analyzeRoomObservation.mock.calls[0][2];
+        expect(ctx).not.toHaveProperty('capturedAtText');
+        const saved = state.inserted[0].fiveW1h as Record<string, unknown>;
+        expect(saved.when).toBe('2030-02-01 00:04:05（日本時間）');
+        expect(saved.where).toBe('会議室');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  }
 });
 
 describe('カメラの環境観察の指示', () => {

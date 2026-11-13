@@ -87,7 +87,7 @@ export async function processObservation(
     console.warn('[Observation] 画像前処理に失敗、元データで解析:', (err as Error).message);
   }
 
-  // 取得時刻は AI に渡さず、ここで日本時間を入れる（AI に渡すと資料から読めた文字に日付が混ざることがある）
+  // when は AI に書かせず、ここで入れる
   const capturedAtText = formatCapturedAtJst(now);
   const locationText = location ? `緯度 ${location.lat}, 経度 ${location.lng}` : null;
   const result = cameraViews
