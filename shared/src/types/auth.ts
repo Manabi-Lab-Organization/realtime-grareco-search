@@ -12,6 +12,7 @@ export interface User {
 
 export interface ServerFeatures {
   grareco: boolean;
+  meetingEndGrareco: boolean;
   autoGrareco: boolean;
   grarecoSearch: boolean;
   research: boolean;
@@ -22,6 +23,7 @@ export interface ServerFeatures {
 
 export const ALL_FEATURES_ON: ServerFeatures = {
   grareco: true,
+  meetingEndGrareco: true,
   autoGrareco: true,
   grarecoSearch: true,
   research: true,

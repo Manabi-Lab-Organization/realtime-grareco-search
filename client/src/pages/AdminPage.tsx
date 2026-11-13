@@ -103,6 +103,7 @@ function AnalyticsTab() {
   const featureRows: { label: string; on: boolean; hint: string }[] = [
     { label: 'リアルタイム調査', on: features.research, hint: 'ANTHROPIC_API_KEY（RESEARCH_ENABLED=false で停止）' },
     { label: '手動グラレコ', on: features.grareco, hint: 'GEMINI_API_KEY または OPENAI_API_KEY' },
+    { label: '会議終了時のグラレコ', on: features.meetingEndGrareco, hint: 'GEMINI_API_KEY または OPENAI_API_KEY（MEETING_END_GRARECO_ENABLED=false で停止）' },
     { label: '自動グラレコ・グラレコ検索', on: features.autoGrareco, hint: 'GEMINI_API_KEY' },
     { label: 'Google ログイン', on: features.googleLogin, hint: 'GOOGLE_CLIENT_ID' },
     { label: 'メール送信（パスワード再設定メールなど）', on: features.email, hint: 'RESEND_API_KEY' },
