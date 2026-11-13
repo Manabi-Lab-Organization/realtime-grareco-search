@@ -2,6 +2,7 @@ import { hasGeminiKey } from './llm/genaiClient.js';
 
 export interface ServerFeatures {
   grareco: boolean;
+  meetingEndGrareco: boolean;
   autoGrareco: boolean;
   grarecoSearch: boolean;
   research: boolean;
@@ -24,6 +25,7 @@ export function serverFeatures(env: NodeJS.ProcessEnv = process.env): ServerFeat
   const anthropic = !!env.ANTHROPIC_API_KEY;
   return {
     grareco: gemini || openai,
+    meetingEndGrareco: (gemini || openai) && env.MEETING_END_GRARECO_ENABLED !== 'false',
     autoGrareco: gemini,
     grarecoSearch: gemini,
     research: anthropic && env.RESEARCH_ENABLED !== 'false',

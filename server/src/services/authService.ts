@@ -11,6 +11,10 @@ import { invalidateAllUserAccess } from './authSessionService.js';
 import { DEFAULT_AUTO_GRARECO_SETTINGS } from './grareco/types.js';
 import { clearInitialSetupCode, issueInitialSetupCode, matchesInitialSetupCode } from './initialSetupCode.js';
 
+export function newUserResearchSettings(env: NodeJS.ProcessEnv = process.env) {
+  return { ...NEW_USER_RESEARCH_SETTINGS, main: env.NEW_USER_RESEARCH_ENABLED !== 'false' };
+}
+
 export const NEW_USER_RESEARCH_SETTINGS = {
   main: true,
   web: true,
@@ -199,7 +203,7 @@ export async function register(
         passwordHash,
         displayName: displayName || null,
         role,
-        researchSettings: NEW_USER_RESEARCH_SETTINGS,
+        researchSettings: newUserResearchSettings(),
         inviteVerified: true,
         inviteVerifiedAt: new Date(),
       })
@@ -414,7 +418,7 @@ export async function findOrCreateByGoogle(
         googleId,
         role,
         emailVerifiedAt: new Date(),
-        researchSettings: NEW_USER_RESEARCH_SETTINGS,
+        researchSettings: newUserResearchSettings(),
         inviteVerified: true,
         inviteVerifiedAt: new Date(),
       })
