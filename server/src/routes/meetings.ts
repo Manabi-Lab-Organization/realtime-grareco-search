@@ -589,7 +589,7 @@ async function sendMeetingEndEmailFromHttp(
       .where(eq(structuredSummaries.meetingId, meetingId))
       .orderBy(desc(structuredSummaries.updatedAt));
     const summaryContent = await rebuildSummaryAtMeetingEnd(
-      { id: meetingId, participants, ngKeywords: mtgCheck?.ngKeywords },
+      { id: meetingId, participants, ngKeywords: mtgCheck?.ngKeywords, startedAt: mtgCheck?.startedAt ? new Date(mtgCheck.startedAt) : null },
       summary?.content || '',
     );
 
@@ -637,7 +637,7 @@ async function sendMeetingEndEmailFromHttp(
     const sourceText = sourceTextParts.join('\n\n') || transcriptText;
 
     const [minutesText, grarecoResult] = await Promise.all([
-      generateMeetingMinutes(summaryContent || '（サマリーなし）', transcriptText, participantsArray, supplementary).catch(
+      generateMeetingMinutes(summaryContent || '（サマリーなし）', transcriptText, participantsArray, supplementary, mtgCheck?.startedAt ? new Date(mtgCheck.startedAt) : endedAt).catch(
         (err) => {
           console.error(`[MeetingEmail] 議事録生成失敗:`, err);
           return '議事録の自動生成に失敗しました。サマリーページをご確認ください。';
@@ -1082,6 +1082,8 @@ export async function rebuildMeetingSummary(meeting: {
   id: number;
   participants: unknown;
   ngKeywords: unknown;
+  // 開催日。暦と曜日の検算で年を決める基準（過去の会議の作り直しで「今日」基準にしない）
+  startedAt?: Date | null;
 }) {
   const meetingId = meeting.id;
   const participants = Array.isArray(meeting.participants) ? (meeting.participants as any[]) : [];
@@ -1109,6 +1111,8 @@ export async function rebuildMeetingSummary(meeting: {
       ),
     })),
     participants,
+    4,
+    meeting.startedAt ?? null,
   );
 
   if (existing) {
@@ -1155,7 +1159,8 @@ export async function rebuildMeetingSummary(meeting: {
 }
 
 export async function rebuildSummaryAtMeetingEnd(
-  meeting: { id: number; participants: unknown; ngKeywords: unknown },
+  // startedAt：開催日。曜日の検算の基準（HTTP 経由の再送などで過去の会議に対して呼ばれても「今日」基準にしない）
+  meeting: { id: number; participants: unknown; ngKeywords: unknown; startedAt?: Date | null },
   currentSummary: string,
 ): Promise<string> {
   const started = Date.now();
@@ -1609,6 +1614,7 @@ router.post('/:id/analyze', meetingAnalysisLimiter, imageJsonBody, async (req, r
         additionalPrompt,
         images,
         participants: participants.filter((p: any) => p.name),
+        meetingDate: meeting.startedAt ? new Date(meeting.startedAt) : null,
       });
 
       const metadata: Record<string, unknown> = {

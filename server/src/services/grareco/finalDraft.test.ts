@@ -344,3 +344,36 @@ describe('formatMeetingDate', () => {
     expect(formatMeetingDate(new Date('2001-03-02T23:30:00Z'))).toBe('2001年3月3日（土）');
   });
 });
+
+// 日付と曜日の食い違い（2026-11-13）：開催日の暦を宿題・決定事項の抽出に渡し、AI が書いた曜日が暦と合わなければ
+// 書き換えずに「【日付要確認】」の印を付ける
+describe('日付と曜日の検算', () => {
+  // 2026-11-13（金）の会議。11/21 は土曜、11/23 は月曜
+  const meetingDateValue = new Date('2026-11-13T05:00:00Z');
+
+  it('開催日の暦を抽出の指示に入れ、暦と合わない曜日には印を付ける（日付も曜日も書き換えない）', async () => {
+    generateContent.mockImplementation(async ({ contents }: any) => {
+      const prompt: string = contents[0].parts[0].text;
+      if (prompt.includes('話題ごとに要点')) return { text: JSON.stringify(condenseReplyFor(2)) };
+      return { text: JSON.stringify({ ...keyReply, decisions: ['次回は11/23（土）14:00', '11/21（土）に再確認'] }) };
+    });
+    const d = await buildGrarecoDraft({
+      summary: summaryWith(2),
+      material: '次週の土曜日 14時に再度会議',
+      meetingDate: '2026年11月13日（金）',
+      meetingDateValue,
+    });
+    const keyPrompt = generateContent.mock.calls
+      .map((c: any) => c[0].contents[0].parts[0].text as string)
+      .find((p) => p.includes('この場の成果'))!;
+    expect(keyPrompt).toContain('曜日を書くときは必ず次の暦から写すこと');
+    expect(keyPrompt).toContain('11/21(土)');
+    expect(d.decisions).toEqual(['次回は11/23（土）【日付要確認】14:00', '11/21（土）に再確認']);
+  });
+
+  it('貼り付けた文面の要約にも開催日を渡す（作り直しの暦の基準）', async () => {
+    rebuildStructuredSummary.mockResolvedValue(summaryWith(1));
+    await summarizePastedContent('短い文面', undefined, meetingDateValue);
+    expect(rebuildStructuredSummary.mock.calls[0][3]).toBe(meetingDateValue);
+  });
+});

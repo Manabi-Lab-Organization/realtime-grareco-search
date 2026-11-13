@@ -29,6 +29,7 @@ export async function generateManualGrareco(
       pasted,
       material: buildGrarecoInput(pasted, options),
       meetingDate: draft?.meetingDate ? formatMeetingDate(draft.meetingDate) : undefined,
+      meetingDateValue: draft?.meetingDate,
       participants: draft?.participants,
       meetingType: draft?.meetingType,
     });
