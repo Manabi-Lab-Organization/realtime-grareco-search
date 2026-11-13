@@ -7,6 +7,15 @@ import { analyzeRoomObservation, analyzeRoomObservationMultiView, consolidateMat
 import { insertSupplementaryText } from './meetingImageService.js';
 import { isEquirectangular, reprojectEquirectToViews, VIEW_LABELS } from './equirectReproject.js';
 
+export function formatCapturedAtJst(d: Date): string {
+  const p = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).format(d);
+  return `${p}（日本時間）`;
+}
+
 const CONSOLIDATE_WINDOW_MS = 10 * 60 * 1000;
 
 export interface ObservationInput {
@@ -78,15 +87,16 @@ export async function processObservation(
     console.warn('[Observation] 画像前処理に失敗、元データで解析:', (err as Error).message);
   }
 
-  const capturedAtText = now.toISOString().replace('T', ' ').slice(0, 19);
+  // 取得時刻は AI に渡さず、ここで日本時間を入れる（AI に渡すと資料から読めた文字に日付が混ざることがある）
+  const capturedAtText = formatCapturedAtJst(now);
   const locationText = location ? `緯度 ${location.lat}, 経度 ${location.lng}` : null;
   const result = cameraViews
-    ? await analyzeRoomObservationMultiView(cameraViews, { capturedAtText, locationText })
+    ? await analyzeRoomObservationMultiView(cameraViews, { locationText })
     : await analyzeRoomObservation(aiData, aiMime, {
-        capturedAtText,
         locationText,
         mode: isScreen ? 'screen' : 'camera',
       });
+  result.fiveW1H.when = capturedAtText;
 
   const meetingElapsedMs = meetingStartedAt
     ? Math.round(now.getTime() - new Date(meetingStartedAt).getTime())
