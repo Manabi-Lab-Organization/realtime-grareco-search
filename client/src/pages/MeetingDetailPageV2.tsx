@@ -11,8 +11,6 @@ import {
   Share2,
   ChevronDown,
   ChevronUp,
-  ChevronLeft,
-  ChevronRight,
   Users,
   Maximize2,
   CheckSquare,
@@ -82,6 +80,8 @@ import {
 import type { Meeting, StructuredSummary, Participant, DetectedTerm, MeetingImage, MeetingMemo, MeetingObservation } from 'shared';
 import type { Socket } from 'socket.io-client';
 import { safeHref } from '@/lib/safeHref';
+import { researchCardTag, researchCardTagText } from '@/lib/researchTag';
+import { knownOnOff, settingsStatusText } from '@/lib/settingsStatus';
 
 let evalAllowed: boolean | null = null;
 function canUseEval(): boolean {
@@ -126,7 +126,12 @@ export default function MeetingDetailPageV2() {
     !!user && meetingId > 0,
     meeting?.status === 'active' || meeting?.status === 'paused',
   );
-  const { settings: researchSettings, update: updateResearchSettings } = useResearchSettings(
+  const {
+    settings: researchSettings,
+    update: updateResearchSettings,
+    loaded: researchSettingsLoaded,
+    loading: researchSettingsLoading,
+  } = useResearchSettings(
     viewerSocketRef,
     viewerSocketReady,
   );
@@ -316,7 +321,6 @@ export default function MeetingDetailPageV2() {
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
-  const [termsCollapsed, setTermsCollapsed] = useState(false);
 
   const [selectedSections, setSelectedSections] = useState<Set<number>>(new Set());
   const summarySections = useMemo<SummarySection[]>(() => {
@@ -713,7 +717,7 @@ export default function MeetingDetailPageV2() {
 
   const handleToggleResearchSubAgent = useCallback(
     async (key: 'main' | 'web' | 'fact' | 'gap' | 'tech') => {
-      if (!researchSettings) return;
+      if (!researchSettings || !researchSettingsLoaded) return;
       const newValue = !researchSettings[key];
       try {
         await updateResearchSettings({ [key]: newValue });
@@ -725,7 +729,7 @@ export default function MeetingDetailPageV2() {
         });
       }
     },
-    [researchSettings, updateResearchSettings, toast],
+    [researchSettings, researchSettingsLoaded, updateResearchSettings, toast],
   );
 
   const handleCopyAllResearch = useCallback(async () => {
@@ -1357,13 +1361,7 @@ export default function MeetingDetailPageV2() {
           </div>
         )}
 
-        <div
-          className={`grid grid-cols-1 gap-4 items-start ${
-            termsCollapsed
-              ? 'lg:grid-cols-[2fr_1fr]'
-              : 'lg:grid-cols-[2fr_1fr_288px]'
-          }`}
-        >
+        <div className="flex flex-col gap-4">
           {features.autoGrareco && (
           <div data-section="grareco">
           <GrarecoSection
@@ -1378,7 +1376,7 @@ export default function MeetingDetailPageV2() {
               setGrarecoFullscreen(false);
             }}
             onCopyImage={(item) => copyGrarecoImage(item, toast)}
-            autoEnabled={!!researchSettings?.autoGrareco?.enabled}
+            autoEnabled={knownOnOff(researchSettingsLoaded, !!researchSettings?.autoGrareco?.enabled)}
             pendingCount={grarecoPendingCount}
             onBulkPromote={handleBulkPromote}
             bulkPromoting={bulkPromoting}
@@ -1406,39 +1404,13 @@ export default function MeetingDetailPageV2() {
             onCopyCard={(card) =>
               copyTextToClipboard(formatResearchCardForCopy(card), card.title, toast)
             }
-            mainEnabled={!!researchSettings?.main}
+            mainEnabled={knownOnOff(researchSettingsLoaded, !!researchSettings?.main)}
             shareControl={shareControl}
           />
           </div>
           )}
 
-          {!termsCollapsed && (
-            <TermsSection
-              terms={termGlossary.terms}
-              onDismiss={termGlossary.dismissTerm}
-              open={termsVisible}
-              onToggle={() => setTermsVisible((v) => !v)}
-              onCollapseHorizontal={() => setTermsCollapsed(true)}
-              shareControl={shareControl}
-            />
-          )}
         </div>
-
-        {termsCollapsed && termGlossary.terms.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setTermsCollapsed(false)}
-            className="fixed right-3 top-1/3 z-40 flex flex-col items-center gap-1 px-2 py-3 rounded-l-lg shadow-md bg-purple-50 dark:bg-purple-900/40 border border-r-0 border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-900/60 transition-colors"
-            title="用語解説を開く"
-            aria-label="用語解説を開く"
-          >
-            <span className="text-base">📚</span>
-            <span className="text-[10px] font-semibold tabular-nums">
-              {termGlossary.terms.length}
-            </span>
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-        )}
 
         <div data-section="summary">
         <SummaryBanner
@@ -1473,10 +1445,16 @@ export default function MeetingDetailPageV2() {
         )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-          {features.grareco && <ManualGrarecoSection meetingId={meetingId} shareControl={shareControl} />}
-          <AnalysesSection meetingId={meetingId} />
-        </div>
+        {features.grareco && <ManualGrarecoSection meetingId={meetingId} shareControl={shareControl} />}
+        <AnalysesSection meetingId={meetingId} />
+
+        <TermsSection
+          terms={termGlossary.terms}
+          onDismiss={termGlossary.dismissTerm}
+          open={termsVisible}
+          onToggle={() => setTermsVisible((v) => !v)}
+          shareControl={shareControl}
+        />
 
         <TranscriptSection
           transcripts={transcripts}
@@ -1490,6 +1468,7 @@ export default function MeetingDetailPageV2() {
           showResearch={features.research}
           showAutoGrareco={features.autoGrareco}
           researchSettings={researchSettings}
+          settingsStatus={settingsStatusText(researchSettingsLoaded, researchSettingsLoading)}
           updateResearchSettings={updateResearchSettings}
           onToggleSubAgent={handleToggleResearchSubAgent}
         />
@@ -1838,7 +1817,8 @@ function LiveTranscriptStrip({
   );
 }
 
-function OnOffBadge({ on }: { on: boolean }) {
+function OnOffBadge({ on }: { on: boolean | null }) {
+  if (on === null) return null;
   if (on) {
     return (
       <span
@@ -2939,7 +2919,7 @@ function GrarecoSection({
   onToggle: () => void;
   onCardClick: (item: GrarecoFeedItem) => void;
   onCopyImage: (item: GrarecoFeedItem) => void;
-  autoEnabled: boolean;
+  autoEnabled: boolean | null;
   pendingCount: number;
   onBulkPromote: () => void;
   bulkPromoting: boolean;
@@ -3244,7 +3224,7 @@ function ResearchSection({
   onCopySelected: () => void;
   onCardClick: (c: ResearchCard) => void;
   onCopyCard: (c: ResearchCard) => void;
-  mainEnabled: boolean;
+  mainEnabled: boolean | null;
   shareControl?: ShareControl;
 }) {
   const total = cards.length;
@@ -3345,14 +3325,12 @@ function TermsSection({
   onDismiss,
   open,
   onToggle,
-  onCollapseHorizontal,
   shareControl,
 }: {
   terms: DetectedTerm[];
   onDismiss: (term: string) => void;
   open: boolean;
   onToggle: () => void;
-  onCollapseHorizontal?: () => void;
   shareControl?: ShareControl;
 }) {
   return (
@@ -3368,17 +3346,6 @@ function TermsSection({
           </div>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
-          {onCollapseHorizontal && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onCollapseHorizontal}
-              aria-label="右側に格納（横折りたたみ）"
-              title="横折りたたみ（リアルタイム調査を広く表示）"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          )}
           <Button variant="ghost" size="sm" onClick={onToggle} aria-label={open ? '閉じる' : '展開'}>
             {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </Button>
@@ -3434,38 +3401,18 @@ function TermsSection({
   );
 }
 
-function researchPillStyle(cardType: string): { bg: string; text: string; label: string } {
-  switch (cardType) {
-    case 'info':
-      return {
-        bg: 'bg-emerald-50 dark:bg-emerald-900/30',
-        text: 'text-emerald-700 dark:text-emerald-300',
-        label: '補足情報',
-      };
-    case 'fact-check':
-      return {
-        bg: 'bg-blue-50 dark:bg-blue-900/30',
-        text: 'text-blue-700 dark:text-blue-300',
-        label: '事実確認',
-      };
-    case 'gap-alert':
-      return {
-        bg: 'bg-amber-50 dark:bg-amber-900/30',
-        text: 'text-amber-700 dark:text-amber-300',
-        label: '論理課題',
-      };
-    case 'minutes-todo':
-      return {
-        bg: 'bg-slate-100 dark:bg-slate-800',
-        text: 'text-slate-700 dark:text-slate-300',
-        label: 'ToDo',
-      };
+function researchPillStyle(card: { cardType: string; agentType?: string | null }): { bg: string; text: string; label: string } {
+  const tag = researchCardTag(card);
+  const label = `${tag.icon} ${tag.label}`;
+  switch (tag.tone) {
+    case 'fact':
+      return { bg: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300', label };
+    case 'gap':
+      return { bg: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-300', label };
+    case 'todo':
+      return { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-700 dark:text-slate-300', label };
     default:
-      return {
-        bg: 'bg-slate-100 dark:bg-slate-800',
-        text: 'text-slate-700 dark:text-slate-300',
-        label: cardType,
-      };
+      return { bg: 'bg-emerald-50 dark:bg-emerald-900/30', text: 'text-emerald-700 dark:text-emerald-300', label };
   }
 }
 
@@ -3486,7 +3433,7 @@ function ResearchCardRow({
   onCopy: () => void;
   shareControl?: ShareControl;
 }) {
-  const pill = researchPillStyle(card.cardType);
+  const pill = researchPillStyle(card);
   const showShareToggle = !!shareControl?.active && isShareableResearch(card);
   return (
     <div
@@ -4399,12 +4346,14 @@ function SettingsSection({
   showResearch,
   showAutoGrareco,
   researchSettings,
+  settingsStatus,
   updateResearchSettings,
   onToggleSubAgent,
 }: {
   showResearch: boolean;
   showAutoGrareco: boolean;
   researchSettings: ResearchSettings;
+  settingsStatus: string | null;
   updateResearchSettings: (patch: Partial<ResearchSettings>) => Promise<void>;
   onToggleSubAgent: (key: 'main') => void;
 }) {
@@ -4427,7 +4376,10 @@ function SettingsSection({
           {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </Button>
       </header>
-      {open && (
+      {open && settingsStatus && (
+        <div className="p-4 text-sm text-muted-foreground">{settingsStatus}</div>
+      )}
+      {open && !settingsStatus && (
         <div className="p-4 space-y-4">
           {showResearch && (
           <div>
@@ -4546,7 +4498,7 @@ function Sep() {
 
 function ResearchCardDetailView({ card, onClose }: { card: ResearchCard; onClose: () => void }) {
   const { toast } = useToast();
-  const pill = researchPillStyle(card.cardType);
+  const pill = researchPillStyle(card);
   return (
     <>
       <DialogHeader>
@@ -4830,9 +4782,8 @@ function ChatFab({
 }
 
 function formatResearchCardForCopy(card: ResearchCard): string {
-  const pill = researchPillStyle(card.cardType);
   const lines: string[] = [];
-  lines.push(`【${pill.label}】 ${card.keyword}`);
+  lines.push(`【${researchCardTagText(card)}】 ${card.keyword}`);
   lines.push(`■ ${card.title}`);
   if (card.body) lines.push('', card.body);
   if (card.sources && card.sources.length > 0) {

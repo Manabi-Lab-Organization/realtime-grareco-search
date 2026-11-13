@@ -26,11 +26,13 @@ export function useResearchSettings(
 ): {
   settings: ResearchSettings;
   loading: boolean;
+  loaded: boolean;
   error: string | null;
   update: (patch: Partial<ResearchSettings>) => Promise<void>;
 } {
   const [settings, setSettings] = useState<ResearchSettings>(DEFAULT_RESEARCH_SETTINGS);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,6 +44,7 @@ export function useResearchSettings(
         const data = await res.json();
         if (!cancelled) {
           setSettings({ ...DEFAULT_RESEARCH_SETTINGS, ...data });
+          setLoaded(true);
           setError(null);
         }
       } catch (e) {
@@ -58,6 +61,7 @@ export function useResearchSettings(
     const socket = socketRef.current;
     const handler = (next: Partial<ResearchSettings>) => {
       setSettings(prev => ({ ...prev, ...next }));
+      setLoaded(true);
     };
     socket.on('research_settings_updated', handler);
     return () => {
@@ -77,6 +81,7 @@ export function useResearchSettings(
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSettings({ ...DEFAULT_RESEARCH_SETTINGS, ...data });
+      setLoaded(true);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -85,11 +90,12 @@ export function useResearchSettings(
         if (refetch.ok) {
           const fresh = await refetch.json();
           setSettings({ ...DEFAULT_RESEARCH_SETTINGS, ...fresh });
+          setLoaded(true);
         }
       } catch {
       }
     }
   }, []);
 
-  return { settings, loading, error, update };
+  return { settings, loading, loaded, error, update };
 }
