@@ -1,5 +1,6 @@
 import { ThinkingLevel } from '@google/genai';
 import { createGenAI } from './llm/genaiClient.js';
+import { dateContextBlock, markWeekdayMismatches, logWeekdayMismatches } from './dateWeekday.js';
 import { AppError, BadRequestError } from '../errors/AppError.js';
 import {
   buildGrarecoInput,
@@ -143,8 +144,11 @@ export async function generateMeetingMinutes(
   summaryContent: string,
   transcriptText: string,
   participants?: Array<{ name: string; gender?: string; age?: string; other?: string }> | null,
-  supplementaryContext?: string | null
+  supplementaryContext?: string | null,
+  // 開催日（2026-11-13）。AI に暦を渡し、書かれた日付と曜日の食い違いに「要確認」の印を付ける基準。省略時は今日
+  meetingDate?: Date,
 ): Promise<string> {
+  const baseDate = meetingDate ?? new Date();
   const validParticipants = (participants || []).filter(
     (p) => p && p.name && String(p.name).trim()
   );
@@ -164,7 +168,9 @@ export async function generateMeetingMinutes(
 - 【補足資料】は参加者が会議中にアップロードした画像やメモです。議事録の補足情報として活用してください。
 - すべての情報源の内容を漏れなく統合してください。一部の情報源だけに偏らないでください。
 - 議事録は【全文書き起こし】の発話と同じ言語で書いてください（日本語の会議なら日本語）。翻訳や言語の変更はしないでください。
+- 「23日」「来週の月曜」のような日付は、下の【開催日】を基準に絶対日付へ直してください。曜日を書くときは必ず【暦】から写し、自分で数えないでください。
 
+${dateContextBlock(baseDate)}
 ${participantInfo}
 【構造化サマリー（主軸）】
 ${summaryContent}
@@ -196,7 +202,10 @@ ${supplementarySection}
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: { maxOutputTokens: 4000 },
     });
-    return response.text || '議事録を生成できませんでした。';
+    // 日付と曜日が食い違う箇所に「要確認」の印を付ける（どちらが誤りかは決めつけない。AI は暦を数えず推測で書くため）
+    const checked = markWeekdayMismatches(response.text || '議事録を生成できませんでした。', baseDate);
+    logWeekdayMismatches('minutes', checked.mismatches);
+    return checked.text;
   } catch (error) {
     console.error('Meeting minutes generation error:', error);
     throw new AppError(500, '議事録の生成に失敗しました。');
@@ -388,9 +397,12 @@ export async function analyzeTranscript(
     additionalPrompt?: string;
     images?: AnalysisImage[];
     participants?: Array<{ name: string; gender?: string; age?: string; other?: string }> | null;
+    // 開催日。AI に暦を渡し、書かれた日付と曜日の食い違いに「要確認」の印を付ける基準（2026-11-13）。省略時は今日
+    meetingDate?: Date | null;
   }
 ): Promise<string> {
   const config = analysisConfigs[analysisType];
+  const baseDate = options?.meetingDate ?? new Date();
   if (!config || !config.userPrompt) {
     throw new Error(`Unknown analysis type: ${analysisType}`);
   }
@@ -402,7 +414,8 @@ export async function analyzeTranscript(
     }
   }
 
-  let fullText = '';
+  // 開催日と暦を先頭に入れる（「AI分析 → 議事録」もここを通る。会議終了時の議事録とは別の経路）
+  let fullText = `${dateContextBlock(baseDate)}\n\n`;
 
   const validParticipants = (options?.participants || []).filter(
     (p: any) => p && p.name && String(p.name).trim()
@@ -444,7 +457,10 @@ export async function analyzeTranscript(
   try {
     const response = await ai.models.generateContent(request as any);
 
-    return response.text || '分析結果を取得できませんでした。';
+    // 日付と曜日が食い違う箇所に「要確認」の印を付ける（書き換えない）
+    const checked = markWeekdayMismatches(response.text || '分析結果を取得できませんでした。', baseDate);
+    logWeekdayMismatches(`analysis:${analysisType}`, checked.mismatches);
+    return checked.text;
   } catch (error: any) {
     console.error('Analysis error:', error);
     const errorMsg = error?.message || error?.toString() || '';
@@ -714,13 +730,37 @@ ${newTranscripts}
 - actionが"update_and_new"の場合、両方必要です`;
 }
 
+/**
+ * 構造化サマリーを作る（会議中の差分更新・初回・作り直しの入口）。
+ * AI に開催日と暦を渡し、書かれた「月日（曜）」の曜日が暦と食い違えば「要確認」の印を付ける（2026-11-13）。
+ * 年の無い日付は開催日（渡されなければ今日）に最も近い年で数える。
+ */
 export async function generateStructuredSummary(
   newTranscripts: string,
   previousSummary?: string | null,
   participants?: Array<{ name: string; gender?: string; age?: string; other?: string }> | null,
-  supplementaryContext?: string | null
+  supplementaryContext?: string | null,
+  // 開催日。年の無い日付の年を決める基準（過去の会議の作り直しで「今日」を基準にすると正しい曜日に印を付けてしまう）。省略時は今日
+  meetingDate?: Date | null,
 ): Promise<string> {
-  const participantInfo = buildParticipantInfo(participants);
+  const base = meetingDate ?? new Date();
+  const raw = await generateStructuredSummaryRaw(newTranscripts, previousSummary, participants, supplementaryContext, base);
+  const checked = markWeekdayMismatches(raw, base);
+  logWeekdayMismatches('summary', checked.mismatches);
+  return checked.text;
+}
+
+async function generateStructuredSummaryRaw(
+  newTranscripts: string,
+  previousSummary?: string | null,
+  participants?: Array<{ name: string; gender?: string; age?: string; other?: string }> | null,
+  supplementaryContext?: string | null,
+  baseDate: Date = new Date(),
+): Promise<string> {
+  // 開催日と暦を参加者情報の前に入れる（初回・差分・作り直しのどの指示文にも入る）。
+  // サマリーを書く AI は今日が何年何月何日かを知らず、2026-11-13 の会議の「次週の土曜日」を 2024 年の暦で
+  // 「11/23（土）」と書いた（正しくは 11/21）。議事録・グラレコはこのサマリーから作るので、ここが根本
+  const participantInfo = `\n${dateContextBlock(baseDate)}\n${buildParticipantInfo(participants)}`;
   const supplementarySection = buildSupplementarySection(supplementaryContext);
 
   if (!previousSummary) {
@@ -813,6 +853,8 @@ export async function rebuildStructuredSummary(
   windows: Array<{ transcript: string; supplementaryContext?: string | null }>,
   participants?: Array<{ name: string; gender?: string; age?: string; other?: string }> | null,
   concurrency = 4,
+  // 開催日（暦と曜日の検算の基準）。過去の会議の作り直しで渡す
+  meetingDate?: Date | null,
 ): Promise<string> {
   const parts: string[] = new Array(windows.length);
   let next = 0;
@@ -821,10 +863,10 @@ export async function rebuildStructuredSummary(
       const i = next++;
       const { transcript, supplementaryContext } = windows[i];
       try {
-        parts[i] = await generateStructuredSummary(transcript, null, participants, supplementaryContext);
+        parts[i] = await generateStructuredSummary(transcript, null, participants, supplementaryContext, meetingDate);
       } catch {
         console.warn(`[Summary] Rebuild window ${i + 1}/${windows.length} failed, retrying once`);
-        parts[i] = await generateStructuredSummary(transcript, null, participants, supplementaryContext);
+        parts[i] = await generateStructuredSummary(transcript, null, participants, supplementaryContext, meetingDate);
       }
     }
   };

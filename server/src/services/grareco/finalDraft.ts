@@ -1,5 +1,6 @@
 
 import type { GoogleGenAI } from '@google/genai';
+import { dateContextBlock, markWeekdayMismatchesDeep, logWeekdayMismatches, type WeekdayMismatch } from '../dateWeekday.js';
 import { createGenAI } from '../llm/genaiClient.js';
 import { auditGeminiCall } from '../audit/audit.js';
 import {
@@ -179,16 +180,17 @@ export function splitTextIntoChunks(text: string, chunkChars = PASTED_CHUNK_CHAR
 
 export type Participants = Parameters<typeof generateStructuredSummary>[2];
 
-export async function summarizePastedContent(pasted: string, participants?: Participants): Promise<string> {
+// meetingDate：開催日。要約の AI に渡す暦の基準（渡さないと「今日」を開催日として扱い、過去の会議の「来週」を今日基準で解いてしまう）
+export async function summarizePastedContent(pasted: string, participants?: Participants, meetingDate?: Date): Promise<string> {
   const timed = extractTimedTranscript(pasted);
   let merged: string;
   if (timed.length > 0) {
     const windows = splitTranscriptIntoWindows(timed);
-    merged = await rebuildStructuredSummary(windows.map((w) => ({ transcript: w.lines.join('\n') })), participants);
+    merged = await rebuildStructuredSummary(windows.map((w) => ({ transcript: w.lines.join('\n') })), participants, 4, meetingDate);
     console.log(`[Grareco-Draft] 貼られた文字起こし ${timed.length}行を ${windows.length}区間で要約`);
   } else {
     const chunks = splitTextIntoChunks(pasted);
-    merged = await rebuildStructuredSummary(chunks.map((c) => ({ transcript: c })), participants);
+    merged = await rebuildStructuredSummary(chunks.map((c) => ({ transcript: c })), participants, 4, meetingDate);
     console.log(`[Grareco-Draft] 貼られた文面 ${pasted.length}字を ${chunks.length}区切りで要約`);
   }
   return consolidateSummaryThemes(merged, participants);
@@ -280,14 +282,20 @@ export function normalizeKeyItems(parsed: unknown, fixedKind?: DraftKind): KeyIt
   };
 }
 
-export async function extractKeyItems(material: string, meetingDate?: string, fixedKind?: DraftKind): Promise<KeyItems> {
+export async function extractKeyItems(
+  material: string,
+  meetingDate?: string,
+  fixedKind?: DraftKind,
+  // 開催日の前後の暦（dateWeekday.dateContextBlock）。曜日を推測で書かせないため
+  calendar?: string,
+): Promise<KeyItems> {
   const kindLine = fixedKind
     ? `この場は **${fixedKind === 'training' ? '研修（講義・セミナー・ワークショップ）' : '会議'}** です。kind は "${fixedKind}" とすること。`
     : `まず、この場が **会議**（参加者が議論し、何かを決めたり分担したりする場）か、**研修**（講師が教え、受講者が学ぶ場。講義・セミナー・ワークショップを含む）かを内容から判断し、kind に "meeting" か "training" を入れること。`;
   const parsed = await callJson(
     `次は会議・研修などの素材です（サマリー・文字起こし・補足資料など）。**最後まで読み**、この場の成果を抜き出してください。
 結論や次回の予定・宿題は終盤に出ることが多いので、終盤を読み落とさないこと。
-${meetingDate ? `\n開催日は ${meetingDate} です。「10日」「再来週の月曜」のような相対表現は、この日を基準に絶対日付へ直してください。\n` : ''}
+${meetingDate ? `\n開催日は ${meetingDate} です。「10日」「再来週の月曜」のような相対表現は、この日を基準に絶対日付へ直してください。\n${calendar ? `曜日を書くときは必ず次の暦から写すこと（自分で数えない。暦に無い日付には曜日を書かない）。\n${calendar}\n` : ''}` : ''}
 ${kindLine}
 
 出力は JSON 一つだけ:
@@ -371,22 +379,37 @@ export interface GrarecoDraftInput {
   pasted?: string;
   material: string;
   meetingDate?: string;
+  /** 開催日そのもの。暦を AI に渡し、書かれた日付と曜日の食い違いに印を付ける基準（2026-11-13） */
+  meetingDateValue?: Date;
   participants?: Participants;
   meetingType?: string | null;
 }
 
 export async function buildGrarecoDraft(input: GrarecoDraftInput): Promise<FinalDraft> {
-  const summary = input.summary?.trim() ? input.summary : await summarizePastedContent(input.pasted ?? input.material, input.participants);
+  const summary = input.summary?.trim() ? input.summary : await summarizePastedContent(input.pasted ?? input.material, input.participants, input.meetingDateValue);
   const fromSummary = themesFromSummary(summary);
   if (fromSummary.length === 0) throw new Error('要約から話題を取り出せませんでした');
   const themes = await fitThemesToSpace(fromSummary);
 
-  const [sections, key] = await Promise.all([condenseThemes(themes), extractKeyItems(input.material, input.meetingDate, kindFromMeetingType(input.meetingType))]);
+  const [sections, key] = await Promise.all([
+    condenseThemes(themes),
+    extractKeyItems(
+      input.material,
+      input.meetingDate,
+      kindFromMeetingType(input.meetingType),
+      input.meetingDateValue ? dateContextBlock(input.meetingDateValue) : undefined,
+    ),
+  ]);
   console.log(
     `[Grareco-Draft] 要約の話題 ${fromSummary.length} → 枠 ${sections.length} ／ 種類 ${key.kind}${kindFromMeetingType(input.meetingType) ? '（指定）' : ''} 決定${key.decisions.length} 要点${key.keyPoints.length} ` +
       `宿題${key.actionItems.length} 気付き${key.highlights.length}（素材 ${input.material.length}字${input.meetingDate ? ` / 開催日 ${input.meetingDate}` : ''}）`,
   );
-  return { ...key, sections };
+  // 日付と曜日が食い違えば「【日付要確認】」を付ける（どちらが誤りかは決めつけず、書き換えない。
+  // AI は暦を数えず推測で書く。2026-11-13 に「11/23（土）」（正しくは 11/21（土））が出た）。年の無い日付は開催日に最も近い年で数える
+  const mismatches: WeekdayMismatch[] = [];
+  const draft = markWeekdayMismatchesDeep({ ...key, sections }, input.meetingDateValue ?? new Date(), 'short', mismatches);
+  logWeekdayMismatches('grareco-draft', mismatches);
+  return draft;
 }
 
 export function formatActionItem(a: FinalDraftActionItem): string {

@@ -1,4 +1,5 @@
 
+import { markWeekdayMismatchesDeep, logWeekdayMismatches, type WeekdayMismatch } from '../dateWeekday.js';
 import { eq, desc, and, gte } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { transcripts, structuredSummaries, researchInsights, meetings } from '../../db/schema.js';
@@ -248,6 +249,12 @@ async function generateDraftCommon(
     throw new Error('Stage 1 draft generation failed: invalid JSON');
   }
 
+  // 日付と曜日が食い違えば「【日付要確認】」を付ける（書き換えない。会議中に作るので「今日」を基準に年を決める・2026-11-13）
+  const weekdayMismatches: WeekdayMismatch[] = [];
+  Object.assign(draft, markWeekdayMismatchesDeep({ ...draft }, new Date(), 'short', weekdayMismatches));
+  logWeekdayMismatches('grareco-auto-draft', weekdayMismatches);
+
+  // 調査の参照は AI の出力を信用せず、サーバ側で入れる（この後で上書きするので、印付けの対象外）
   draft.researchRefs = researchRefs;
 
   if (REFLECT_TRIGGERS.has(triggerType)) {

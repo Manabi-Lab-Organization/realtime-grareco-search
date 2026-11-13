@@ -111,7 +111,7 @@ async function sendMeetingEndEmail(meetingId: number, userId: number, title: str
     const participantsArray = Array.isArray(mtg?.participants) ? mtg.participants as any[] : [];
 
     summaryContent = await rebuildSummaryAtMeetingEnd(
-      { id: meetingId, participants: mtg?.participants, ngKeywords: mtg?.ngKeywords },
+      { id: meetingId, participants: mtg?.participants, ngKeywords: mtg?.ngKeywords, startedAt: mtgCheck?.startedAt ? new Date(mtgCheck.startedAt) : null },
       summaryContent,
     );
 
@@ -151,7 +151,7 @@ async function sendMeetingEndEmail(meetingId: number, userId: number, title: str
     console.log(`[MeetingEmail] グラレコ用テキスト: ${grarecoSourceText.length}文字（書き起こし: ${Math.min(transcriptText.length, GRARECO_TRANSCRIPT_LIMIT)}文字, 参加者: ${participantsArray.length}名）`);
 
     const [minutesText, grarecoResult] = await Promise.all([
-      generateMeetingMinutes(summaryContent || '（サマリーなし）', transcriptText, participantsArray, supplementary).catch(
+      generateMeetingMinutes(summaryContent || '（サマリーなし）', transcriptText, participantsArray, supplementary, mtgCheck?.startedAt ? new Date(mtgCheck.startedAt) : endedAt).catch(
         (err) => {
           console.error(`[MeetingEmail] 議事録生成失敗:`, err);
           return '議事録の自動生成に失敗しました。サマリーページをご確認ください。';

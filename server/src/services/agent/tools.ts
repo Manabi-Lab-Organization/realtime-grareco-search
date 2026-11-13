@@ -1172,6 +1172,7 @@ const triggerAiAnalysis: AgentTool = {
     const analysisContent = await analyzeTranscript(sourceText, type, {
       participants,
       additionalPrompt,
+      meetingDate: meeting.startedAt ? new Date(meeting.startedAt) : null,
     });
     const [created] = await db
       .insert(analyses)
