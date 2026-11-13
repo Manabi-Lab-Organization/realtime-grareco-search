@@ -1,3 +1,4 @@
+import { researchCardTagText } from './researchTag';
 
 export interface ShareMeta {
   title: string | null;
@@ -84,15 +85,8 @@ export const TERM_CATEGORY_LABEL: Record<PublicTerm['category'], string> = {
   other: 'その他',
 };
 
-export function researchCardLabel(cardType: string): string {
-  switch (cardType) {
-    case 'fact-check':
-      return '事実確認';
-    case 'info':
-      return '参考情報';
-    default:
-      return '情報';
-  }
+export function researchCardLabel(card: { cardType: string; agentType?: string | null }): string {
+  return researchCardTagText(card);
 }
 
 export function formatTermForCopy(t: PublicTerm): string {
@@ -102,7 +96,7 @@ export function formatTermForCopy(t: PublicTerm): string {
 
 export function formatResearchForCopy(c: PublicResearchCard): string {
   const lines: string[] = [];
-  lines.push(`【${researchCardLabel(c.cardType)}】 ${c.keyword}`);
+  lines.push(`【${researchCardLabel(c)}】 ${c.keyword}`);
   lines.push(`■ ${c.title}`);
   if (c.body) lines.push('', c.body);
   if (c.sources && c.sources.length > 0) {

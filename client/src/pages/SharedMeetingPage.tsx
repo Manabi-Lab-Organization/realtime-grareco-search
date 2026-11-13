@@ -313,7 +313,7 @@ export default function SharedMeetingPage() {
                     title={
                       <span>
                         <span className="text-[10px] font-medium text-primary mr-1">
-                          {researchCardLabel(c.cardType)}
+                          {researchCardLabel(c)}
                         </span>
                         {c.title}
                       </span>
