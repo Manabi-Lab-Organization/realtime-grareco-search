@@ -85,15 +85,19 @@ export function useResearchSettings(
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      let restored = false;
       try {
         const refetch = await fetch('/api/user/research-settings', { credentials: 'include' });
         if (refetch.ok) {
           const fresh = await refetch.json();
           setSettings({ ...DEFAULT_RESEARCH_SETTINGS, ...fresh });
           setLoaded(true);
+          restored = true;
         }
       } catch {
       }
+      if (!restored) setLoaded(false);
+      throw e instanceof Error ? e : new Error(String(e));
     }
   }, []);
 

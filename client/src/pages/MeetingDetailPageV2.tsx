@@ -723,13 +723,28 @@ export default function MeetingDetailPageV2() {
         await updateResearchSettings({ [key]: newValue });
       } catch (err) {
         toast({
-          title: '設定更新に失敗',
-          description: err instanceof Error ? err.message : 'エラー',
+          title: '設定を保存できませんでした',
+          description: '時間をおいて、もう一度お試しください。',
           variant: 'destructive',
         });
       }
     },
     [researchSettings, researchSettingsLoaded, updateResearchSettings, toast],
+  );
+
+  const updateResearchSettingsWithNotice = useCallback(
+    async (patch: Partial<ResearchSettings>) => {
+      try {
+        await updateResearchSettings(patch);
+      } catch {
+        toast({
+          title: '設定を保存できませんでした',
+          description: '時間をおいて、もう一度お試しください。',
+          variant: 'destructive',
+        });
+      }
+    },
+    [updateResearchSettings, toast],
   );
 
   const handleCopyAllResearch = useCallback(async () => {
@@ -1361,6 +1376,7 @@ export default function MeetingDetailPageV2() {
           </div>
         )}
 
+        {(features.autoGrareco || features.research) && (
         <div className="flex flex-col gap-4">
           {features.autoGrareco && (
           <div data-section="grareco">
@@ -1411,6 +1427,7 @@ export default function MeetingDetailPageV2() {
           )}
 
         </div>
+        )}
 
         <div data-section="summary">
         <SummaryBanner
@@ -1469,7 +1486,7 @@ export default function MeetingDetailPageV2() {
           showAutoGrareco={features.autoGrareco}
           researchSettings={researchSettings}
           settingsStatus={settingsStatusText(researchSettingsLoaded, researchSettingsLoading)}
-          updateResearchSettings={updateResearchSettings}
+          updateResearchSettings={updateResearchSettingsWithNotice}
           onToggleSubAgent={handleToggleResearchSubAgent}
         />
         )}
