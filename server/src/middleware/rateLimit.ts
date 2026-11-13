@@ -129,6 +129,22 @@ export const grarecoManualTriggerLimiter = aiFeatureLimiter(10, 20);
 
 export const manualResearchLimiter = aiFeatureLimiter(10, 10);
 
+export function createBulkDeleteLimiter(max: number = isProd ? 30 : 300): RateLimitRequestHandler {
+  return rateLimit({
+    handler: rateLimitHitHandler('bulkDelete'),
+    windowMs: 10 * 60 * 1000,
+    max,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator: (req) => aiRateLimitKey(req as RateLimitKeyRequest),
+    message: {
+      error: '一括削除の操作が短時間に集中しています。10分ほど待ってから再度お試しください。',
+    },
+  });
+}
+
+export const bulkDeleteLimiter: RateLimitRequestHandler = createBulkDeleteLimiter();
+
 export const passwordResetLimiter: RateLimitRequestHandler = rateLimit({
   handler: rateLimitHitHandler('passwordReset'),
   windowMs: 15 * 60 * 1000,

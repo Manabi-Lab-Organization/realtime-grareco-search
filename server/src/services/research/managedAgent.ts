@@ -1146,18 +1146,24 @@ class MeetingSession {
 
 const activeSessions = new Map<number, MeetingSession>();
 
-export async function fetchUserResearchSettings(userId: number): Promise<ResearchSettings> {
+const UNREADABLE_RESEARCH_SETTINGS: ResearchSettings = { ...DEFAULT_RESEARCH_SETTINGS, main: false };
+
+export async function fetchUserResearchSettingsIfReadable(userId: number): Promise<ResearchSettings | null> {
   try {
     const [row] = await db
       .select({ researchSettings: users.researchSettings })
       .from(users)
       .where(eq(users.id, userId));
-    if (!row) return DEFAULT_RESEARCH_SETTINGS;
+    if (!row) return null;
     return { ...DEFAULT_RESEARCH_SETTINGS, ...((row.researchSettings as Partial<ResearchSettings>) ?? {}) };
   } catch (e) {
-    console.error('[research] fetchUserResearchSettings failed:', e instanceof Error ? e.message : String(e));
-    return DEFAULT_RESEARCH_SETTINGS;
+    console.error('[research] fetchUserResearchSettingsIfReadable failed:', e instanceof Error ? e.message : String(e));
+    return null;
   }
+}
+
+export async function fetchUserResearchSettings(userId: number): Promise<ResearchSettings> {
+  return (await fetchUserResearchSettingsIfReadable(userId)) ?? UNREADABLE_RESEARCH_SETTINGS;
 }
 
 function auditResearchCost(feature: string, userId: number, meetingId: number, cost: Record<string, unknown>, extra: Record<string, unknown>): void {
