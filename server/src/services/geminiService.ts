@@ -69,6 +69,19 @@ const ai = createGenAI({
 const MODEL_FLASH = 'gemini-3-flash-preview';
 const MODEL_IMAGE = DEFAULT_GRARECO_MODEL;
 
+export function observationThinkingConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): { thinkingConfig?: { thinkingLevel: ThinkingLevel } } {
+  const map: Record<string, ThinkingLevel> = {
+    minimal: ThinkingLevel.MINIMAL,
+    low: ThinkingLevel.LOW,
+    medium: ThinkingLevel.MEDIUM,
+    high: ThinkingLevel.HIGH,
+  };
+  const level = map[(env.OBSERVATION_THINKING_LEVEL ?? '').trim().toLowerCase()];
+  return level ? { thinkingConfig: { thinkingLevel: level } } : {};
+}
+
 export type AnalysisType =
   | 'minutes'
   | 'research'
@@ -1269,7 +1282,7 @@ ${SENSITIVE_ATTRIBUTE_GUARD}
           { inlineData: { mimeType, data: imageData } },
         ],
       }],
-      config: { maxOutputTokens: 8000 },
+      config: { maxOutputTokens: 8000, ...observationThinkingConfig() },
     });
 
     return parseRoomObservation(response.text || '');
@@ -1300,7 +1313,7 @@ export async function analyzeRoomObservationMultiView(
     const response = await ai.models.generateContent({
       model: MODEL_FLASH,
       contents: [{ role: 'user', parts }],
-      config: { maxOutputTokens: 8000 },
+      config: { maxOutputTokens: 8000, ...observationThinkingConfig() },
     });
     return parseRoomObservation(response.text || '');
   } catch (error: any) {
@@ -1339,7 +1352,7 @@ ${joined}
     const response = await ai.models.generateContent({
       model: MODEL_FLASH,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: { maxOutputTokens: 8000 },
+      config: { maxOutputTokens: 8000, ...observationThinkingConfig() },
     });
     return (response.text || '').trim();
   } catch (error: any) {
