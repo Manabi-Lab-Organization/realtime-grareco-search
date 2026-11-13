@@ -196,3 +196,11 @@ describe('bulkDeleteLimiter（実際の express で）', () => {
     expect((await post(2)).status).toBe(200);
   });
 });
+
+describe('一括削除のルートに回数制限が付いている', () => {
+  it('meetings ルーターの bulk-delete が bulkDeleteLimiter を通る', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../../routes/meetings.ts', import.meta.url), 'utf-8');
+    expect(src).toContain("router.post('/bulk-delete', bulkDeleteLimiter, async");
+  });
+});

@@ -1146,7 +1146,6 @@ class MeetingSession {
 
 const activeSessions = new Map<number, MeetingSession>();
 
-// 設定を読めないときは、費用のかかるリアルタイム調査を止めた状態として扱う
 const UNREADABLE_RESEARCH_SETTINGS: ResearchSettings = { ...DEFAULT_RESEARCH_SETTINGS, main: false };
 
 export async function fetchUserResearchSettingsIfReadable(userId: number): Promise<ResearchSettings | null> {

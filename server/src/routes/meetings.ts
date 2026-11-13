@@ -77,7 +77,6 @@ const router = Router();
 
 router.use(requireAuth);
 
-// 配列の要素数の上限。要素の検証より先に弾き、不正な要素が大量にある配列で検証エラーがメモリを使い切るのを防ぐ
 const BULK_DELETE_MAX_IDS = 1000;
 const PARTICIPANTS_MAX = 2000;
 const SHARE_EXCLUDED_ITEMS_MAX = 2000;
