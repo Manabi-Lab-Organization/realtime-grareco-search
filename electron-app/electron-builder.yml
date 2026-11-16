@@ -17,7 +17,7 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!{tailwind.config.js,postcss.config.js}'
   - '!{electron-builder.yml,*.tsbuildinfo}'
-  - '!{build,certs,scripts}/**'
+  - '!{build,certs,scripts,test}/**'
 win:
   executableName: RealtimeGraRecoSearch
   signtoolOptions:
