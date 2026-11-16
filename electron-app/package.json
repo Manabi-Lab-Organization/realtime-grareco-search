@@ -1,7 +1,7 @@
 {
   "name": "electron-app",
   "productName": "Realtime GraReco & Search",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "license": "Apache-2.0",
   "description": "Realtime GraReco & Search - Desktop App",
   "main": "./out/main/index.js",

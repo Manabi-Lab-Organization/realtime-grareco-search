@@ -113,7 +113,7 @@ export interface ElectronAPI {
     }
   ): Promise<{ ok: true; observation: unknown } | { ok: false; error: string }>
   postRoomObservationConsent(version: number): Promise<{ ok: true } | { ok: false; error: string }>
-  listWindows(): Promise<Array<{ id: string; name: string; dataUrl: string }>>
+  listWindows(): Promise<Array<{ id: string; name: string; dataUrl: string; iconDataUrl?: string }>>
   captureWindowShot(
     windowId: string,
     windowName?: string

@@ -30,3 +30,10 @@ export function withTimeout<T>(p: Promise<T>, ms: number, label = 'timeout'): Pr
     )
   })
 }
+
+export function excludeOwnWindows<T extends WindowSourceLike>(sources: T[], ownIds: string[]): T[] {
+  const key = (id: string): string => id.split(':').slice(0, 2).join(':')
+  const own = new Set(ownIds.filter(Boolean).map(key))
+  if (own.size === 0) return sources
+  return sources.filter((s) => !own.has(key(s.id)))
+}

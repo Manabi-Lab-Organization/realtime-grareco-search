@@ -24,6 +24,7 @@ export interface WindowSource {
   id: string
   name: string
   dataUrl: string
+  iconDataUrl?: string
 }
 export interface DisplaySource {
   id: string

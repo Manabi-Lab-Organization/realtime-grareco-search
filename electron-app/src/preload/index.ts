@@ -133,7 +133,7 @@ const api = {
     ipcRenderer.invoke('api:uploadObservation', meetingId, dataUrl, opts),
   postRoomObservationConsent: (version: number): Promise<{ ok: true } | { ok: false; error: string }> =>
     ipcRenderer.invoke('api:postRoomObservationConsent', version),
-  listWindows: (): Promise<Array<{ id: string; name: string; dataUrl: string }>> =>
+  listWindows: (): Promise<Array<{ id: string; name: string; dataUrl: string; iconDataUrl?: string }>> =>
     ipcRenderer.invoke('capture:listWindows'),
   captureWindowShot: (
     windowId: string,

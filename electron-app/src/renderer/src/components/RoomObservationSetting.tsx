@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { WindowPickerOverlay } from './WindowPickerOverlay'
 import type {
   CameraDevice,
   WindowSource,
@@ -55,30 +56,43 @@ export function RoomObservationSetting({
   notice,
 }: Props): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  const selectedWindow = windows.find((w) => w.id === windowId)
+  const showWindowSummary = enabled && source === 'window'
 
   return (
     <div className="rounded-lg bg-gray-50 border border-gray-200/80">
+      <div className="flex items-center">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors rounded-lg"
+        className="flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors rounded-lg"
       >
-        <span className="flex items-center gap-1.5">
-          環境観察（カメラ / 画面）
+        <span className="min-w-0 flex items-center gap-1.5">
+          <span className="shrink-0">環境観察（カメラ / 画面）</span>
+          {showWindowSummary && (
+            <span
+              className={`min-w-0 truncate font-normal ${windowName ? 'text-gray-800' : 'text-amber-600'}`}
+              title={windowName || undefined}
+            >
+              {windowName ? `ウィンドウ：${windowName}` : 'ウィンドウ：未選択'}
+            </span>
+          )}
           {status === 'observing' && !lastError && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600">
+            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-emerald-600">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               環境解析中
             </span>
           )}
           {status === 'observing' && lastError && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-amber-600">
+            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-amber-600">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
               {windowHidden ? 'ウィンドウが見えないため一時停止中（戻すと自動で再開）' : '映像が取得できていません'}
             </span>
           )}
         </span>
         <svg
-          className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`shrink-0 w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -86,6 +100,29 @@ export function RoomObservationSetting({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
+      {showWindowSummary && !open && (
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          className="shrink-0 mr-2 px-2.5 py-1 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+        >
+          {windowName ? '変更' : '選ぶ'}
+        </button>
+      )}
+      </div>
+
+      {pickerOpen && (
+        <WindowPickerOverlay
+          windows={windows}
+          refreshWindows={refreshWindows}
+          currentId={windowId}
+          onConfirm={(id, name) => {
+            selectWindow(id, name)
+            setPickerOpen(false)
+          }}
+          onCancel={() => setPickerOpen(false)}
+        />
+      )}
 
       {open && (
         <div className="px-3 pb-3 space-y-2">
@@ -164,8 +201,8 @@ export function RoomObservationSetting({
                       }`}
                       title={d.name}
                     >
-                      <img src={d.dataUrl} alt="" className="w-full h-16 object-cover bg-gray-200" />
-                      <div className="px-1 py-0.5 text-[9px] text-gray-600 truncate flex items-center gap-1">
+                      <img src={d.dataUrl} alt="" className="w-full h-20 object-contain bg-gray-200" />
+                      <div className="px-1 py-0.5 text-[11px] text-gray-700 truncate flex items-center gap-1">
                         <input type="checkbox" readOnly checked={selectedDisplayIds.includes(d.displayId)} className="scale-75" />
                         {d.name}
                       </div>
@@ -183,41 +220,28 @@ export function RoomObservationSetting({
               </div>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-500">
-                  解析するウィンドウを1つ選択（会議アプリの共有画面など）
+            <div className="flex items-center gap-2.5 rounded border border-gray-200 bg-white px-2 py-1.5">
+              {selectedWindow?.dataUrl && (
+                <span className="shrink-0 w-16 h-10 rounded border border-gray-200 bg-gray-100 overflow-hidden flex items-center justify-center">
+                  <img src={selectedWindow.dataUrl} alt="" className="max-w-full max-h-full object-contain" />
                 </span>
-                <button
-                  onClick={() => void refreshWindows()}
-                  className="text-[10px] text-brand-600 underline hover:text-brand-700"
-                >
-                  更新
-                </button>
-              </div>
-              {windowName && (
-                <div className="text-[10px] text-emerald-700 truncate">選択中: {windowName}</div>
               )}
-              <div className="max-h-40 overflow-y-auto grid grid-cols-2 gap-1.5">
-                {windows.map((w) => (
-                  <button
-                    key={w.id}
-                    onClick={() => selectWindow(w.id, w.name)}
-                    className={`text-left rounded border overflow-hidden ${
-                      windowId === w.id ? 'border-brand-500 ring-1 ring-brand-400' : 'border-gray-300'
-                    }`}
-                    title={w.name}
-                  >
-                    <img src={w.dataUrl} alt="" className="w-full h-16 object-cover bg-gray-200" />
-                    <div className="px-1 py-0.5 text-[9px] text-gray-600 truncate">{w.name}</div>
-                  </button>
-                ))}
-                {windows.length === 0 && (
-                  <div className="col-span-2 text-[10px] text-gray-400 py-2 text-center">
-                    「更新」を押してウィンドウを取得
-                  </div>
-                )}
-              </div>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[11px] text-gray-500">解析するウィンドウ（1つ）</span>
+                <span
+                  className={`block truncate text-[13px] font-medium ${windowName ? 'text-gray-800' : 'text-amber-600'}`}
+                  title={windowName || undefined}
+                >
+                  {windowName || '未選択'}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="shrink-0 px-2.5 py-1 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+              >
+                {windowName ? '変更' : 'ウィンドウを選ぶ'}
+              </button>
             </div>
           )}
 
