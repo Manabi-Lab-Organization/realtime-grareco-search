@@ -44,7 +44,7 @@ import {
 } from './apiClient'
 import { hostname } from 'os'
 import { normalizeServerInput, checkServerInfo } from './serverUrl'
-import { findWindowSource, withTimeout } from './windowSource'
+import { excludeOwnWindows, findWindowSource, withTimeout } from './windowSource'
 import { net } from 'electron'
 
 async function mintDesktopExchangeCode(): Promise<string> {
@@ -950,12 +950,20 @@ function setupIPC(): void {
   ipcMain.handle('capture:listWindows', async () => {
     const sources = await desktopCapturer.getSources({
       types: ['window'],
-      thumbnailSize: { width: 320, height: 200 },
-      fetchWindowIcons: false
+      thumbnailSize: { width: 480, height: 300 },
+      fetchWindowIcons: true
     })
-    return sources
+    const ownIds = BrowserWindow.getAllWindows()
+      .filter((w) => !w.isDestroyed())
+      .map((w) => w.getMediaSourceId())
+    return excludeOwnWindows(sources, ownIds)
       .filter((s) => s.name && s.name.trim())
-      .map((s) => ({ id: s.id, name: s.name, dataUrl: s.thumbnail.toDataURL() }))
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        dataUrl: s.thumbnail.isEmpty() ? '' : s.thumbnail.toDataURL(),
+        iconDataUrl: s.appIcon && !s.appIcon.isEmpty() ? s.appIcon.toDataURL() : ''
+      }))
   })
 
   ipcMain.handle('capture:windowShot', async (_event, windowId: string, windowName?: string) => {
