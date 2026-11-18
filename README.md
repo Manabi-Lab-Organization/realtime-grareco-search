@@ -73,7 +73,7 @@ docker compose --profile https up -d
 ## アプリ
 
 - **デスクトップアプリ（Mac / Windows）**：株式会社学びラボが署名して GitHub Releases で配ります。立ち上げたサーバの `/download` からも入手できます
-- **iPhone アプリ**：株式会社学びラボが App Store で配る予定です（まだ公開していません）
+- **iPhone アプリ**：App Store では配りません（配らないと決めました）。ソースコードは `mobile-app` に置いてあり、使うときは自分でビルドして iPhone に入れます
 
 どちらも、最初に接続先のサーバのアドレスを入力して使います。文字起こしはアプリで行うため、GitHub の Releases にデスクトップアプリが出るまでは、サーバを立ち上げても文字起こしはできません。
 

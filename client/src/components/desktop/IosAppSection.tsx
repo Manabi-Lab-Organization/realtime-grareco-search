@@ -24,7 +24,7 @@ export function IosAppSection() {
             </Button>
           </a>
         ) : (
-          <p className="text-xs text-muted-foreground">App Store での公開を準備しています。</p>
+          <p className="text-xs text-muted-foreground">App Store では配っていません。ソースコードからビルドして使えます。</p>
         )}
       </CardContent>
     </Card>
