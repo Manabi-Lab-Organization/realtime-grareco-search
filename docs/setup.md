@@ -167,7 +167,7 @@ docker compose logs -f app
 文字起こしは、デスクトップアプリか iPhone アプリで行います。
 
 - **デスクトップアプリ（Mac / Windows）**：サーバの `/download`（ログインしてから開く）か、GitHub の Releases ページから入手します。`/download` は、公開されている最新の版をそのまま案内します（設定は要りません）
-- **iPhone アプリ**：App Store で配る予定です。まだ公開していません
+- **iPhone アプリ**：App Store では配りません。ソースコード（`mobile-app`）から自分でビルドして iPhone に入れます（[releasing.md](releasing.md) の「iPhone」）
 
 アプリを最初に開いたら、接続先のサーバのアドレス（`APP_URL`）を入れてからログインします。Mac では、マイク・画面収録（オンライン会議の音声を拾うため）の許可を求められます。
 
