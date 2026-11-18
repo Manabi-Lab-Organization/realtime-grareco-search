@@ -80,6 +80,7 @@ import {
 import type { Meeting, StructuredSummary, Participant, DetectedTerm, MeetingImage, MeetingMemo, MeetingObservation } from 'shared';
 import type { Socket } from 'socket.io-client';
 import { safeHref } from '@/lib/safeHref';
+import { HEADER_TOGGLE_CLASS, headerToggleClick } from '@/lib/headerToggle';
 import { researchCardTag, researchCardTagText } from '@/lib/researchTag';
 import { knownOnOff, settingsStatusText } from '@/lib/settingsStatus';
 
@@ -2611,7 +2612,12 @@ function SummaryBanner({
   const hasContent = !!summary?.content?.trim();
   const hasStats = stats.topics > 0 || stats.decisions > 0 || stats.todos > 0;
   return (
-    <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap">
+    <section
+      className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap ${
+        hasContent ? HEADER_TOGGLE_CLASS : ''
+      }`}
+      onClick={headerToggleClick(onToggleDetail, hasContent)}
+    >
       <div className="flex items-start gap-3 min-w-0 flex-1">
         <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 text-base">
           📊
@@ -2995,7 +3001,10 @@ function GrarecoSection({
 
   return (
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-      <header className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+      <header
+        className={`px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 ${HEADER_TOGGLE_CLASS}`}
+        onClick={headerToggleClick(onToggle)}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/30 flex items-center justify-center text-base">
             🎨
@@ -3248,7 +3257,10 @@ function ResearchSection({
   const selectedCount = selectedIds.size;
   return (
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-      <header className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+      <header
+        className={`px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 ${HEADER_TOGGLE_CLASS}`}
+        onClick={headerToggleClick(onToggle)}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-base">
             🔍
@@ -3352,7 +3364,10 @@ function TermsSection({
 }) {
   return (
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-      <header className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+      <header
+        className={`px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 ${HEADER_TOGGLE_CLASS}`}
+        onClick={headerToggleClick(onToggle)}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center text-base">
             📚
@@ -3568,7 +3583,10 @@ function ManualGrarecoSection({
   return (
     <>
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-        <header className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+        <header
+          className={`px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 ${HEADER_TOGGLE_CLASS}`}
+          onClick={headerToggleClick(() => setOpen((v) => !v))}
+        >
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center text-base">
               <Paintbrush className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -4049,7 +4067,10 @@ function AnalysesSection({ meetingId }: { meetingId: number }) {
   );
   return (
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-      <header className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+      <header
+        className={`px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 ${HEADER_TOGGLE_CLASS}`}
+        onClick={headerToggleClick(() => setOpen((v) => !v))}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-900/30 flex items-center justify-center text-base">
             <Sparkle className="w-4 h-4 text-sky-600 dark:text-sky-400" />
@@ -4231,7 +4252,10 @@ function TranscriptSection({
 
   return (
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-      <header className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+      <header
+        className={`px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 ${HEADER_TOGGLE_CLASS}`}
+        onClick={headerToggleClick(() => setOpen((v) => !v))}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-base">
             📝
@@ -4377,7 +4401,10 @@ function SettingsSection({
   const [open, setOpen] = useState(false);
   return (
     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-      <header className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+      <header
+        className={`px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 ${HEADER_TOGGLE_CLASS}`}
+        onClick={headerToggleClick(() => setOpen((v) => !v))}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
             <Settings className="w-4 h-4 text-slate-500" />
