@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AutoGrarecoSettings } from 'shared';
 import { DEFAULT_AUTO_GRARECO_SETTINGS } from 'shared';
+import { applyResearchSettingsPatch, type ResearchSettingsPatch } from '@/lib/researchSettingsPatch';
+
+export type { ResearchSettingsPatch };
 
 export interface ResearchSettings {
   main: boolean;
@@ -28,7 +31,7 @@ export function useResearchSettings(
   loading: boolean;
   loaded: boolean;
   error: string | null;
-  update: (patch: Partial<ResearchSettings>) => Promise<void>;
+  update: (patch: ResearchSettingsPatch) => Promise<void>;
 } {
   const [settings, setSettings] = useState<ResearchSettings>(DEFAULT_RESEARCH_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -69,8 +72,8 @@ export function useResearchSettings(
     };
   }, [socketRef, socketReady]);
 
-  const update = useCallback(async (patch: Partial<ResearchSettings>) => {
-    setSettings(prev => ({ ...prev, ...patch }));
+  const update = useCallback(async (patch: ResearchSettingsPatch) => {
+    setSettings(prev => applyResearchSettingsPatch(prev, patch));
     try {
       const res = await fetch('/api/user/research-settings', {
         method: 'PUT',

@@ -72,7 +72,7 @@ import { StageDraftCard } from '@/components/grareco/StageDraftCard';
 import { AutoGrarecoSettingsCard } from '@/components/grareco/AutoGrarecoSettingsCard';
 import { useServerFeatures } from '@/hooks/useServerFeatures';
 import { useSiteConfig } from '@/hooks/useSiteConfig';
-import type { ResearchSettings } from '@/hooks/useResearchSettings';
+import type { ResearchSettings, ResearchSettingsPatch } from '@/hooks/useResearchSettings';
 import {
   parseSummarySections,
   type SummarySection,
@@ -734,7 +734,7 @@ export default function MeetingDetailPageV2() {
   );
 
   const updateResearchSettingsWithNotice = useCallback(
-    async (patch: Partial<ResearchSettings>) => {
+    async (patch: ResearchSettingsPatch) => {
       try {
         await updateResearchSettings(patch);
       } catch {
@@ -1164,7 +1164,7 @@ export default function MeetingDetailPageV2() {
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">
       <header className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 lg:gap-3">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Link href="/">
               <Button variant="ghost" size="icon" aria-label="戻る" className="shrink-0">
@@ -4395,7 +4395,7 @@ function SettingsSection({
   showAutoGrareco: boolean;
   researchSettings: ResearchSettings;
   settingsStatus: string | null;
-  updateResearchSettings: (patch: Partial<ResearchSettings>) => Promise<void>;
+  updateResearchSettings: (patch: ResearchSettingsPatch) => Promise<void>;
   onToggleSubAgent: (key: 'main') => void;
 }) {
   const [open, setOpen] = useState(false);

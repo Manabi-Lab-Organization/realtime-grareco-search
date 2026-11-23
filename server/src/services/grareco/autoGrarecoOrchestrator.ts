@@ -36,6 +36,7 @@ import {
   type GrarecoTriggerType,
   type GrarecoDraft,
 } from './types.js';
+import { isInFireCooldown } from './firePacing.js';
 
 function buildImageSourceFromDraft(draft: GrarecoDraft): string {
   const lines: string[] = [];
@@ -68,7 +69,6 @@ function buildImageSourceFromDraft(draft: GrarecoDraft): string {
 
 const RECENT_WINDOW_MS = 90 * 1000;
 const SECTION_RECENT_MS = 30 * 1000;
-const MIN_AUTO_INTERVAL_MS = 5 * 60 * 1000;
 const PROMOTE_DELAY_MS = 30 * 1000;
 const STAGE2_HOURLY_LIMIT_DEFAULT = 8;
 const SILENCE_LOOKBACK_MS = 120 * 1000;
@@ -415,7 +415,7 @@ export async function processFinalTranscript(
   if (!(await isSummaryReady(meetingId))) return;
 
   const now = Date.now();
-  const inFireCooldown = now - s.lastAutoFireAt < MIN_AUTO_INTERVAL_MS;
+  const inFireCooldown = isInFireCooldown(s.lastAutoFireAt, now, settings);
 
   s.isProcessing = true;
   try {
@@ -535,13 +535,15 @@ const silenceCallbacks: SilenceFireCallbacks = {
       .where(eq(meetings.id, meetingId));
     return !!m && m.status === 'active';
   },
-  shouldFireDiscover: async (userId) => {
+  shouldFireDiscover: async (userId, meetingId) => {
     const settings = await getUserAutoGrarecoSettings(userId);
-    return settings.enabled && settings.discover;
+    if (!settings.enabled || !settings.discover) return false;
+    return !isInFireCooldown(ensureMeetingState(meetingId).lastAutoFireAt, Date.now(), settings);
   },
-  shouldFireFallback: async (userId) => {
+  shouldFireFallback: async (userId, meetingId) => {
     const settings = await getUserAutoGrarecoSettings(userId);
-    return settings.enabled && settings.reflect;
+    if (!settings.enabled || !settings.reflect) return false;
+    return !isInFireCooldown(ensureMeetingState(meetingId).lastAutoFireAt, Date.now(), settings);
   },
 };
 

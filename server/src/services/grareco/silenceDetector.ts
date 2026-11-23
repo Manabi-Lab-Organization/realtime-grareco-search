@@ -24,8 +24,8 @@ export interface SilenceFireCallbacks {
   fireFallback: (meetingId: number, userId: number) => Promise<void>;
   getRecentSpokenStats: (meetingId: number) => Promise<{ recentCount: number; priorCount: number }>;
   isMeetingActive: (meetingId: number) => Promise<boolean>;
-  shouldFireDiscover: (userId: number) => Promise<boolean>;
-  shouldFireFallback: (userId: number) => Promise<boolean>;
+  shouldFireDiscover: (userId: number, meetingId: number) => Promise<boolean>;
+  shouldFireFallback: (userId: number, meetingId: number) => Promise<boolean>;
 }
 
 let intervalHandle: NodeJS.Timeout | null = null;
@@ -99,7 +99,7 @@ async function scanLoop(): Promise<void> {
 
       const sinceLastSilenceFire = now - m.lastSilenceFireAt;
       if (sinceLastSilenceFire >= SILENCE_COOLDOWN_MS) {
-        if (await callbacks.shouldFireDiscover(m.userId)) {
+        if (await callbacks.shouldFireDiscover(m.userId, m.meetingId)) {
           const sinceLastSpoken = now - m.lastTranscriptAt;
           if (sinceLastSpoken >= SILENCE_GAP_MS) {
             const stats = await callbacks.getRecentSpokenStats(m.meetingId);
@@ -121,7 +121,7 @@ async function scanLoop(): Promise<void> {
 
       const sinceLastAny = now - m.lastAnyFireAt;
       if (sinceLastAny >= FALLBACK_INTERVAL_MS) {
-        if (await callbacks.shouldFireFallback(m.userId)) {
+        if (await callbacks.shouldFireFallback(m.userId, m.meetingId)) {
           console.log(`[silenceDetector] fallback fire meeting=${m.meetingId} sinceLastAny=${Math.round(sinceLastAny / 1000)}s`);
           try {
             await callbacks.fireFallback(m.meetingId, m.userId);

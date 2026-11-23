@@ -2,11 +2,11 @@
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Settings, ChevronDown, ChevronRight } from 'lucide-react';
-import type { ResearchSettings } from '@/hooks/useResearchSettings';
+import type { ResearchSettings, ResearchSettingsPatch } from '@/hooks/useResearchSettings';
 
 export interface AutoGrarecoSettingsCardProps {
   settings: ResearchSettings | null;
-  onUpdate: (patch: Partial<ResearchSettings>) => Promise<void>;
+  onUpdate: (patch: ResearchSettingsPatch) => Promise<void>;
 }
 
 export function AutoGrarecoSettingsCard({
@@ -17,7 +17,7 @@ export function AutoGrarecoSettingsCard({
   if (!settings) return null;
   const ag = settings.autoGrareco;
   const update = (patch: Partial<typeof ag>) => {
-    void onUpdate({ autoGrareco: { ...ag, ...patch } } as Partial<ResearchSettings>);
+    void onUpdate({ autoGrareco: patch });
   };
 
   const summary = ag.enabled
@@ -112,7 +112,7 @@ export function AutoGrarecoSettingsCard({
                   className="w-full"
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  上限到達後の自動グラレコは画像化されず、ドラフトカードのまま保持されます（手動で「画像化する」を押せば画像化できます）。
+                  自動グラレコを作る間隔もこの枚数に合わせます（例：6 枚なら 10 分に 1 枚まで。12 枚以上は 5 分に 1 枚まで）。それでも上限に達した場合は画像化されず、下書きのカードのまま残ります（手動で「画像化する」を押せば画像化できます）。
                 </p>
               </div>
               <label className="flex items-center justify-between gap-2 cursor-pointer">
