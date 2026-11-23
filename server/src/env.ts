@@ -1,3 +1,5 @@
+// ログに SQL・パラメータ・入力値を書かないよう、ほかの何より先に console を包む
+import './logging/safeConsole.js';
 import dotenv from 'dotenv';
 import { randomBytes } from 'node:crypto';
 import { resolve, dirname } from 'path';
