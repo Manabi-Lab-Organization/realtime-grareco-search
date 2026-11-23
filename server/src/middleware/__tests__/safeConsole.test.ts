@@ -102,6 +102,115 @@ describe('redactLogText', () => {
   });
 });
 
+// DB 以外の失敗に入る値（会議の中身・鍵・リクエストや応答の中身）
+describe('JSON の解釈の失敗：解釈できなかった文字列（AI の出力＝会議の中身）を出さない', () => {
+  function parseError(text: string): Error {
+    try {
+      JSON.parse(text);
+    } catch (e) {
+      return e as Error;
+    }
+    throw new Error('失敗するはず');
+  }
+
+  it('エラーのまま渡しても、message・stack に断片が残らない', () => {
+    const err = parseError('次回の定例会議は山田さんの都合で延期 {"a":');
+    expect(err.message).toContain('次回の定例会議'); // 元のエラーには入っている
+    const out = printed(sanitizeLogError(err));
+    expect(out).not.toContain('次回の定例会議');
+    expect(out).not.toContain('山田');
+    expect(out).toContain('SyntaxError');
+    expect(out).toContain('is not valid JSON');
+    expect(out).toMatch(/\n\s+at /); // 呼び出し元は残す
+    expect(err.message).toContain('次回の定例会議'); // 元のエラーは書き換えない
+  });
+
+  it('`${err}`・err.message で文字列にして渡しても同じ', () => {
+    const err = parseError('担当は"佐藤"、予算は 300 万円');
+    expect(redactLogText(`読めませんでした: ${err}`)).not.toContain('佐藤');
+    expect(redactLogText(`読めませんでした: ${err}`)).not.toContain('300 万円');
+    expect(redactLogText(err.message)).toContain('is not valid JSON');
+  });
+
+  it('断片の無い失敗の文（Unexpected end of JSON input）はそのまま', () => {
+    const err = parseError('{"a":');
+    expect(sanitizeLogError(err)).toBe(err);
+  });
+});
+
+describe('鍵・トークンを出さない', () => {
+  it('Bearer・決まった書き出しの鍵・接続文字列のパスワード・URL の鍵の値を伏せる', () => {
+    const text =
+      'fetch https://generativelanguage.googleapis.com/v1/models?key=AIzaSyA-0123456789abcdefghijklmn&alt=json failed ' +
+      'with Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature, postgres://app:s3cretPass@db.internal:5432/main, ' +
+      'sk-ant-api03-abcdefghijklmnopqrstu, sk_live_0123456789abcdefghij, https://example.com/cb?code=oauthcode123&state=ok';
+    const out = redactLogText(text);
+    for (const secret of ['AIzaSyA', 'eyJhbGci', 's3cretPass', 'sk-ant-api03', 'sk_live_0123', 'oauthcode123']) expect(out).not.toContain(secret);
+    // 追うのに要るものは残す（どこへの通信か・鍵でない値）
+    expect(out).toContain('https://generativelanguage.googleapis.com/v1/models?key=…&alt=json');
+    expect(out).toContain('postgres://…@db.internal:5432/main');
+    expect(out).toContain('state=ok');
+  });
+
+  it('ふつうの文は変えない（URL・「Basic プラン」・task- で始まる ID・短い値）', () => {
+    for (const text of [
+      'GET https://api.example.com/v1/meetings/123 → 200',
+      'Basic プランに変更しました。Basic information を表示',
+      'task-0123456789abcdefghijk を開始',
+      '[Credit] userId=7 amount=3 type=grareco',
+    ]) {
+      expect(redactLogText(text)).toBe(text);
+    }
+  });
+});
+
+describe('エラーに付いたリクエスト・応答の中身を出さない', () => {
+  it('config（Authorization ヘッダ）・response（本文）を外し、状態と code は残す', () => {
+    const err = Object.assign(new Error('Request failed with status code 429'), {
+      name: 'AxiosError',
+      code: 'ERR_BAD_REQUEST',
+      config: { headers: { Authorization: 'Bearer live-token-abcdefgh' }, data: '{"prompt":"会議の文字起こし"}' },
+      response: { status: 429, data: { echoed: '会議の文字起こし' }, headers: { 'set-cookie': 'sid=abc' } },
+    });
+    const safe = sanitizeLogError(err);
+    const out = printed(safe);
+    expect(out).not.toContain('live-token');
+    expect(out).not.toContain('文字起こし');
+    expect(out).not.toContain('set-cookie');
+    expect(out).toContain('Request failed with status code 429');
+    expect(out).toContain('ERR_BAD_REQUEST');
+    expect((safe as unknown as { status: number }).status).toBe(429);
+    // 元のエラーは呼び出し元がまだ使うので、そのまま
+    expect((err as unknown as { response: { status: number } }).response.status).toBe(429);
+    expect((err as unknown as { config: unknown }).config).toBeDefined();
+  });
+
+  it('SDK のエラー（headers・error・raw を持つ）も、状態と文だけにする', () => {
+    const err = Object.assign(new Error('400 invalid_request_error'), {
+      status: 400,
+      headers: { 'request-id': 'req_1' },
+      error: { type: 'error', error: { message: '入力の一部がここに出る' } },
+      raw: { customer_email: 'taro@example.com' },
+    });
+    const out = printed(sanitizeLogError(err));
+    expect(out).not.toContain('入力の一部');
+    expect(out).not.toContain('taro@');
+    expect(out).toContain('status: 400');
+  });
+});
+
+describe('エラーの文の中のメールアドレス', () => {
+  it('message・stack では t***@example.com の形にする', () => {
+    const out = printed(sanitizeLogError(new Error(`送信に失敗: ${EMAIL} は受け取れません`)));
+    expect(out).not.toContain(EMAIL);
+    expect(out).toContain('t***@example.com');
+  });
+
+  it('ふつうのログの文字列は変えない（監査ログなど、出す側で形を決めているもの）', () => {
+    expect(sanitizeLogArg(`[Auth] login ${EMAIL}`)).toBe(`[Auth] login ${EMAIL}`);
+  });
+});
+
 describe('sanitizeLogArg', () => {
   it('{ err } の形でも中のエラーを置き換える', () => {
     const arg = { userId: 1, err: new DrizzleQueryError('select 1', [TOKEN]) };
