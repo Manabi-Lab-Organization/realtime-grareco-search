@@ -69,6 +69,120 @@ const ai = createGenAI({
 const MODEL_FLASH = 'gemini-3-flash-preview';
 const MODEL_IMAGE = DEFAULT_GRARECO_MODEL;
 
+export const PARTICIPANT_LIST_MAX_OUTPUT_TOKENS = 12000;
+
+export const PARTICIPANT_LIST_SCHEMA = {
+  type: 'ARRAY',
+  items: {
+    type: 'OBJECT',
+    properties: {
+      name: { type: 'STRING' },
+      gender: { type: 'STRING', enum: ['男', '女', '分からない'] },
+      age: {
+        type: 'STRING',
+        enum: ['10才未満', '10代', '20代', '30代', '40代', '50代', '60代', '70代', '80才以上', '分からない'],
+      },
+      other: { type: 'STRING' },
+    },
+    required: ['name', 'gender', 'age', 'other'],
+    propertyOrdering: ['name', 'gender', 'age', 'other'],
+  },
+} as const;
+
+export function extractRequestConfig(maxOutputTokens: number, schema: unknown | null): Record<string, unknown> {
+  return {
+    maxOutputTokens,
+    thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+    ...(schema ? { responseMimeType: 'application/json', responseSchema: schema } : {}),
+  };
+}
+
+function nullableText(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t === '' || t.toLowerCase() === 'null' ? null : v;
+}
+
+export function parseMeetingImageResponse(text: string): {
+  analysis: string;
+  diagram: string | null;
+  extractedTime: string | null;
+  parsed: 'json' | 'extracted' | 'raw';
+} {
+  const candidates: Array<{ src: string; how: 'json' | 'extracted' }> = [{ src: text, how: 'json' }];
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) candidates.push({ src: jsonMatch[0], how: 'extracted' });
+  for (const c of candidates) {
+    try {
+      const parsed = JSON.parse(c.src);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+      return {
+        analysis: typeof parsed.analysis === 'string' && parsed.analysis ? parsed.analysis : text,
+        diagram: nullableText(parsed.diagram),
+        extractedTime: nullableText(parsed.extractedTime),
+        parsed: c.how,
+      };
+    } catch {
+    }
+  }
+  return { analysis: text, diagram: null, extractedTime: null, parsed: 'raw' };
+}
+
+type ExtractedParticipant = { name: string; gender: string; age: string; other: string };
+
+export function parseParticipantListResponse(text: string): {
+  participants: ExtractedParticipant[];
+  parsed: 'json' | 'extracted' | 'failed';
+} {
+  const candidates: Array<{ src: string; how: 'json' | 'extracted' }> = [{ src: text, how: 'json' }];
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (jsonMatch) candidates.push({ src: jsonMatch[0], how: 'extracted' });
+  for (const c of candidates) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(c.src);
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(parsed)) continue;
+    const participants = parsed
+      .filter((p: any) => p?.name && String(p.name).trim())
+      .map((p: any) => ({
+        name: String(p.name).trim().slice(0, 100),
+        gender: ['男', '女'].includes(p.gender) ? p.gender : '分からない',
+        age: ['10才未満', '10代', '20代', '30代', '40代', '50代', '60代', '70代', '80才以上'].includes(p.age) ? p.age : '分からない',
+        other: p.other ? String(p.other).trim().slice(0, 200) : '',
+      }));
+    return { participants, parsed: c.how };
+  }
+  return { participants: [], parsed: 'failed' };
+}
+
+function hitOutputLimit(response: any): boolean {
+  return response?.candidates?.[0]?.finishReason === 'MAX_TOKENS';
+}
+
+function warnExtractResponse(tag: string, response: any, text: string, parsed: string): void {
+  if ((parsed === 'json' || parsed === 'extracted') && !hitOutputLimit(response)) return;
+  const u = response?.usageMetadata ?? {};
+  console.warn(
+    `[${tag}] 答えを読めない、または途中で切れた: parsed=${parsed} finishReason=${response?.candidates?.[0]?.finishReason ?? null} `
+    + `length=${text.length} tokens(out/think)=${u.candidatesTokenCount ?? '?'}/${u.thoughtsTokenCount ?? '?'}`,
+  );
+}
+
+export function readParticipantListResponse(
+  tag: string,
+  response: any,
+  opts: { isRetry: boolean },
+): { participants: ExtractedParticipant[]; retryWithoutSchema: boolean } {
+  const text = response?.text || '';
+  const read = parseParticipantListResponse(text);
+  warnExtractResponse(tag, response, text, read.parsed);
+  const failed = read.parsed === 'failed' || hitOutputLimit(response);
+  return { participants: read.participants, retryWithoutSchema: failed && !opts.isRetry };
+}
+
 export function observationThinkingConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): { thinkingConfig?: { thinkingLevel: ThinkingLevel } } {
@@ -1078,23 +1192,13 @@ ${exifSection}
           { inlineData: { mimeType, data: imageData } },
         ],
       }],
-      config: { maxOutputTokens: 8000 },
+      config: extractRequestConfig(8000, null),
     });
 
     const text = response.text || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          analysis: parsed.analysis || text,
-          diagram: parsed.diagram || null,
-          extractedTime: parsed.extractedTime || null,
-        };
-      } catch {
-      }
-    }
-    return { analysis: text, diagram: null, extractedTime: null };
+    const { parsed, ...result } = parseMeetingImageResponse(text);
+    warnExtractResponse('ImageAnalysis', response, text, parsed);
+    return result;
   } catch (error: any) {
     console.error('[ImageAnalysis] Error:', error);
     throw new AppError(500, '画像の分析に失敗しました。');
@@ -1539,34 +1643,27 @@ export async function extractParticipantsFromImage(
 ]`;
 
   try {
-    const response = await ai.models.generateContent({
+    const tag = 'ExtractParticipantsFromImage';
+    const contents = [{
+      role: 'user',
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType, data: imageData } },
+      ],
+    }];
+    const first = await ai.models.generateContent({
       model: MODEL_FLASH,
-      contents: [{
-        role: 'user',
-        parts: [
-          { text: prompt },
-          { inlineData: { mimeType, data: imageData } },
-        ],
-      }],
-      config: { maxOutputTokens: 4000 },
+      contents,
+      config: extractRequestConfig(PARTICIPANT_LIST_MAX_OUTPUT_TOKENS, PARTICIPANT_LIST_SCHEMA),
     });
-
-    const text = response.text || '';
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return (Array.isArray(parsed) ? parsed : [])
-          .filter((p: any) => p.name && String(p.name).trim())
-          .map((p: any) => ({
-            name: String(p.name).trim().slice(0, 100),
-            gender: ['男', '女'].includes(p.gender) ? p.gender : '分からない',
-            age: ['10才未満', '10代', '20代', '30代', '40代', '50代', '60代', '70代', '80才以上'].includes(p.age) ? p.age : '分からない',
-            other: p.other ? String(p.other).trim().slice(0, 200) : '',
-          }));
-      } catch {  }
-    }
-    return [];
+    const firstRead = readParticipantListResponse(tag, first, { isRetry: false });
+    if (!firstRead.retryWithoutSchema) return firstRead.participants;
+    const second = await ai.models.generateContent({
+      model: MODEL_FLASH,
+      contents,
+      config: extractRequestConfig(PARTICIPANT_LIST_MAX_OUTPUT_TOKENS, null),
+    });
+    return readParticipantListResponse(tag, second, { isRetry: true }).participants;
   } catch (error) {
     console.error('[ExtractParticipantsFromImage] Error:', error);
     return [];
@@ -1596,28 +1693,21 @@ ${text.slice(0, 5000)}
 ]`;
 
   try {
-    const response = await ai.models.generateContent({
+    const tag = 'ExtractParticipantsFromText';
+    const contents = [{ role: 'user', parts: [{ text: prompt }] }];
+    const first = await ai.models.generateContent({
       model: MODEL_FLASH,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: { maxOutputTokens: 4000 },
+      contents,
+      config: extractRequestConfig(PARTICIPANT_LIST_MAX_OUTPUT_TOKENS, PARTICIPANT_LIST_SCHEMA),
     });
-
-    const responseText = response.text || '';
-    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return (Array.isArray(parsed) ? parsed : [])
-          .filter((p: any) => p.name && String(p.name).trim())
-          .map((p: any) => ({
-            name: String(p.name).trim().slice(0, 100),
-            gender: ['男', '女'].includes(p.gender) ? p.gender : '分からない',
-            age: ['10才未満', '10代', '20代', '30代', '40代', '50代', '60代', '70代', '80才以上'].includes(p.age) ? p.age : '分からない',
-            other: p.other ? String(p.other).trim().slice(0, 200) : '',
-          }));
-      } catch {  }
-    }
-    return [];
+    const firstRead = readParticipantListResponse(tag, first, { isRetry: false });
+    if (!firstRead.retryWithoutSchema) return firstRead.participants;
+    const second = await ai.models.generateContent({
+      model: MODEL_FLASH,
+      contents,
+      config: extractRequestConfig(PARTICIPANT_LIST_MAX_OUTPUT_TOKENS, null),
+    });
+    return readParticipantListResponse(tag, second, { isRetry: true }).participants;
   } catch (error) {
     console.error('[ExtractParticipantsFromText] Error:', error);
     return [];
