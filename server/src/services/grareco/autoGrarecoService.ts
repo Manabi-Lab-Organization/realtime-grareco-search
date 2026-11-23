@@ -4,8 +4,7 @@ import { eq, desc, and, gte } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { transcripts, structuredSummaries, researchInsights, meetings } from '../../db/schema.js';
 import { parseNgKeywords, filterNgTranscripts } from '../ngKeywordFilterService.js';
-import { GRARECO_DETECTION_MODEL } from '../llm/lightModel.js';
-import { analyzeWithClaude } from '../anthropicService.js';
+import { requestGrarecoDraftText } from './draftRequest.js';
 import {
   REFLECT_TRIGGERS,
   type GrarecoDraft,
@@ -13,7 +12,6 @@ import {
   type ResearchInsightRef,
 } from './types.js';
 
-const HAIKU_MODEL = GRARECO_DETECTION_MODEL;
 const RECENT_WINDOW_MS = 10 * 60 * 1000;
 const MAX_TRANSCRIPT_CHARS = 6000;
 
@@ -233,12 +231,7 @@ async function generateDraftCommon(
   });
 
   const t0 = Date.now();
-  const rawText = await analyzeWithClaude(systemPrompt, userMessage, {
-    model: HAIKU_MODEL,
-    maxTokens: 2048,
-    temperature: 0.4,
-    feature: 'anthropic:grareco.autoDraft',
-  });
+  const rawText = await requestGrarecoDraftText(systemPrompt, userMessage);
   const elapsedMs = Date.now() - t0;
 
   const draft = safeParseDraft(rawText);
