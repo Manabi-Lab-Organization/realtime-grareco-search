@@ -58,6 +58,7 @@ export interface ResearchQueryParams {
   orchestratorWeb?: boolean;
   mcpServers?: Record<string, McpServerConfig>;
   extraAllowedTools?: string[];
+  onUndefinedSubagent?: (name: string) => void;
 }
 
 export const INTERNAL_WEBFETCH_DENY_REASON = '内部ネットワーク・予約アドレスの URL は取得できません。公開されている Web ページの URL を使ってください。';
@@ -179,6 +180,34 @@ export function makeDenyOrchestratorWebFetch(): HookCallback {
   };
 }
 
+export function loggableSubagentName(name: unknown): string {
+  if (name === undefined || name === null || name === '') return '(指定なし)';
+  return typeof name === 'string' && /^[A-Za-z0-9_.:-]{1,40}$/.test(name) ? name : '(その他)';
+}
+
+export function makeDenyUndefinedSubagent(allowedNames: string[], onDenied?: (name: string) => void): HookCallback {
+  const allowed = new Set(allowedNames);
+  return async (input) => {
+    if (input.hook_event_name !== 'PreToolUse' || (input.tool_name !== 'Agent' && input.tool_name !== 'Task')) return {};
+    const name = (input.tool_input as { subagent_type?: unknown } | null)?.subagent_type;
+    if (typeof name === 'string' && allowed.has(name)) return {};
+    try {
+      onDenied?.(loggableSubagentName(name));
+    } catch {
+    }
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason:
+          allowed.size > 0
+            ? `その名前の調査役はありません。subagent_type には次のどれかを、この表記のまま指定してください: ${[...allowed].join(' / ')}`
+            : '今は使える調査役がありません。',
+      },
+    };
+  };
+}
+
 export function buildOrchestratorAgent(p: Pick<ResearchQueryParams, 'systemPrompt' | 'model' | 'effort' | 'orchestratorWeb'>): AgentDefinition {
   const def: AgentDefinition = {
     description: 'この調査を統括する役。調査の依頼先にはしない。',
@@ -205,12 +234,15 @@ export function buildResearchQueryOptions(p: ResearchQueryParams, allowedFetchUr
     settingSources: [],
     strictMcpConfig: true,
     hooks: {
-      PreToolUse: [{
-        matcher: 'WebFetch',
-        hooks: p.orchestratorWeb
-          ? [makeSearchResultOnlyWebFetch(allowedFetchUrls)]
-          : [makeSearchResultOnlyWebFetch(allowedFetchUrls), makeDenyOrchestratorWebFetch()],
-      }],
+      PreToolUse: [
+        {
+          matcher: 'WebFetch',
+          hooks: p.orchestratorWeb
+            ? [makeSearchResultOnlyWebFetch(allowedFetchUrls)]
+            : [makeSearchResultOnlyWebFetch(allowedFetchUrls), makeDenyOrchestratorWebFetch()],
+        },
+        { matcher: 'Agent|Task', hooks: [makeDenyUndefinedSubagent(Object.keys(p.agents), p.onUndefinedSubagent)] },
+      ],
       PostToolUse: [{ matcher: 'WebSearch', hooks: [makeCollectSearchResultUrls(allowedFetchUrls)] }],
     },
   };

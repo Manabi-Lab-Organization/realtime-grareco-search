@@ -48,3 +48,17 @@ describe('errorHandler のクエリの失敗の扱い', () => {
     expect(json.mock.calls[0][0].error).toBe('other failure');
   });
 });
+
+describe('errorHandler の壊れた URL の扱い', () => {
+  it('読み取れない URL には 400 を返し、エラーとしては記録しない', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { res, json } = run(new URIError('Failed to decode param'));
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(json.mock.calls[0][0].error).toBe('Bad request');
+    expect(json.mock.calls[0][0].stack).toBeUndefined();
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+});

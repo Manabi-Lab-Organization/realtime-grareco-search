@@ -88,6 +88,19 @@ export function errorHandler(
     return;
   }
 
+  if (err instanceof URIError) {
+    console.warn(`[${requestId}] MalformedUrl: URL を読み取れませんでした`, {
+      path: req.path,
+      method: req.method,
+      userId,
+    });
+    res.status(400).json({
+      error: 'Bad request',
+      requestId,
+    });
+    return;
+  }
+
   const unhandled = stripQueryParams(err);
   console.error(`[${requestId}] Unhandled error:`, {
     message: unhandled.message,
