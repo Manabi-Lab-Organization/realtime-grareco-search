@@ -39,8 +39,10 @@ import {
   ORCHESTRATOR_AGENT_NAME,
   ORCHESTRATOR_WEBFETCH_DENY_REASON,
   makeDenyOrchestratorWebFetch,
+  makeDenyUndefinedSubagent,
+  loggableSubagentName,
 } from '../agentSandbox.js';
-import { SUB_AGENTS } from '../managedAgent.js';
+import { SUB_AGENTS, scanInsightLines, summarizeUnreadableInsightLines } from '../managedAgent.js';
 
 const FILE_AND_SHELL_TOOLS = ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'NotebookEdit'];
 
@@ -150,8 +152,9 @@ describe('WebFetch の宛先の検査', () => {
 
   it('実行の設定に、WebFetch の検査と WebSearch の結果の記録を加える', () => {
     const o = buildResearchQueryOptions({ agents: {}, systemPrompt: 'x', model: 'sonnet', runDir: '/tmp/x' });
-    expect(o.hooks?.PreToolUse).toHaveLength(1);
+    expect(o.hooks?.PreToolUse).toHaveLength(2);
     expect(o.hooks?.PreToolUse?.[0].matcher).toBe('WebFetch');
+    expect(o.hooks?.PreToolUse?.[1].matcher).toBe('Agent|Task');
     expect(o.hooks?.PostToolUse).toHaveLength(1);
     expect(o.hooks?.PostToolUse?.[0].matcher).toBe('WebSearch');
     expect(typeof denyInternalWebFetch).toBe('function');
@@ -340,5 +343,79 @@ describe('司令塔のツールと考える深さ', () => {
     expect(main.permissionDecision).toBe('deny');
     expect(main.permissionDecisionReason).toBe(ORCHESTRATOR_WEBFETCH_DENY_REASON);
     expect(await hook(fetchInput('agent-1') as any, 't2', { signal })).toEqual({});
+  });
+});
+
+describe('決めていない調査役を呼ばせない', () => {
+  const signal = new AbortController().signal;
+  const call = (tool_name: string, tool_input: unknown) => ({
+    hook_event_name: 'PreToolUse' as const, tool_name, tool_input, tool_use_id: 't1',
+    session_id: 's', transcript_path: '', cwd: '/tmp/x',
+  });
+  const run = async (hook: ReturnType<typeof makeDenyUndefinedSubagent>, tool_name: string, tool_input: unknown) =>
+    ((await hook(call(tool_name, tool_input) as any, 't1', { signal })) as any).hookSpecificOutput;
+
+  it('決めた名前の調査役は通す', async () => {
+    const hook = makeDenyUndefinedSubagent(['技術情報', '補足情報']);
+    expect(await run(hook, 'Agent', { subagent_type: '技術情報' })).toBeUndefined();
+    expect(await run(hook, 'Task', { subagent_type: '補足情報' })).toBeUndefined();
+  });
+
+  it.each([['general-purpose'], ['Explore'], [undefined], [''], [123]])('%s は拒否し、使える名前を返す', async (name) => {
+    const hook = makeDenyUndefinedSubagent(['技術情報', '補足情報']);
+    const d = await run(hook, 'Agent', { subagent_type: name });
+    expect(d.permissionDecision).toBe('deny');
+    expect(d.permissionDecisionReason).toContain('技術情報 / 補足情報');
+  });
+
+  it('使える調査役が無いときは、すべて拒否する', async () => {
+    const d = await run(makeDenyUndefinedSubagent([]), 'Agent', { subagent_type: '技術情報' });
+    expect(d.permissionDecision).toBe('deny');
+  });
+
+  it('調査役を呼ぶツール以外には判定を返さない', async () => {
+    expect(await run(makeDenyUndefinedSubagent([]), 'WebSearch', { query: 'x' })).toBeUndefined();
+  });
+
+  it('拒否したことを、記録に出してよい形の名前で知らせる。知らせる側が失敗しても拒否する', async () => {
+    const seen: string[] = [];
+    const hook = makeDenyUndefinedSubagent(['技術情報'], (n) => { seen.push(n); throw new Error('x'); });
+    const d = await run(hook, 'Agent', { subagent_type: 'Explore' });
+    expect(d.permissionDecision).toBe('deny');
+    await run(hook, 'Agent', { subagent_type: '会議で出た長い文章' });
+    await run(hook, 'Agent', {});
+    expect(seen).toEqual(['Explore', '(その他)', '(指定なし)']);
+    expect(loggableSubagentName('a'.repeat(41))).toBe('(その他)');
+  });
+
+  it('司令塔そのものは、調査の依頼先として通さない', async () => {
+    const o = buildResearchQueryOptions({ agents: { 技術情報: SUB_AGENTS['技術情報'] ?? Object.values(SUB_AGENTS)[0] }, systemPrompt: 'x', model: 'sonnet', runDir: '/tmp/x' });
+    const hook = o.hooks!.PreToolUse![1].hooks[0];
+    const d = ((await hook(call('Agent', { subagent_type: ORCHESTRATOR_AGENT_NAME }) as any, 't1', { signal })) as any).hookSpecificOutput;
+    expect(d.permissionDecision).toBe('deny');
+  });
+});
+
+describe('調査カードの行の読み取り', () => {
+  it('読めた行は中身を、読めなかった行は理由と長さだけを返す', () => {
+    const text = [
+      'ふつうの文章',
+      'INSIGHT:{"title":"A","importance":80}',
+      'INSIGHT: {"title":"B"',
+      'INSIGHT:{"title": こわれた}',
+      'INSIGHT:{"title":"C"}',
+    ].join('\n');
+    const { items, unreadable } = scanInsightLines(text);
+    expect(items.map((i) => i.title)).toEqual(['A', 'C']);
+    expect(unreadable.map((u) => u.reason)).toEqual(['no_json', 'parse_error']);
+    expect(JSON.stringify(unreadable)).not.toContain('こわれた');
+  });
+
+  it('記録に出す形は、件数・理由ごとの件数・長さ（先頭 10 件）だけ', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ reason: i % 2 ? 'no_json' as const : 'parse_error' as const, length: i }));
+    const s = summarizeUnreadableInsightLines(many);
+    expect(s.count).toBe(12);
+    expect(s.reasons).toEqual({ parse_error: 6, no_json: 6 });
+    expect(s.lengths).toHaveLength(10);
   });
 });

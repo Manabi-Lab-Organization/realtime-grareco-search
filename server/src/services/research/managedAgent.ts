@@ -847,6 +847,7 @@ class MeetingSession {
         model: modelConfig.orchestratorModel,
         effort: modelConfig.orchestratorEffort,
         orchestratorWeb: modelConfig.orchestratorWeb,
+        onUndefinedSubagent: (name) => logOrchestrator('subagent_denied_undefined', this.meetingId, { subagentType: name }),
       };
 
       for await (const message of runResearchQuery(prompt, researchQueryParams)) {
@@ -963,14 +964,12 @@ class MeetingSession {
     enforceImportanceFloor = true,
   ): number {
     let saved = 0;
-    const lines = resultText.split('\n');
-    for (const line of lines) {
-      const match = line.match(/INSIGHT:\s*(\{.*\})/);
-      if (!match) continue;
-
+    const { items, unreadable } = scanInsightLines(resultText);
+    if (unreadable.length > 0) {
+      logOrchestrator('insight_lines_unreadable', this.meetingId, summarizeUnreadableInsightLines(unreadable));
+    }
+    for (const input of items) {
       try {
-        const input = JSON.parse(match[1]);
-
         const importance = Math.min(100, Math.max(0, input.importance ?? 50));
         if (enforceImportanceFloor && importance < IMPORTANCE_MIN) {
           logOrchestrator('insight_dropped_low_importance', this.meetingId, {
@@ -1028,6 +1027,7 @@ class MeetingSession {
         }
         saved++;
       } catch (e) {
+        logOrchestrator('insight_card_failed', this.meetingId, { error: e instanceof Error ? e.name : 'unknown' });
       }
     }
     return saved;
@@ -1090,6 +1090,7 @@ class MeetingSession {
         model: modelConfig.orchestratorModel,
         effort: modelConfig.orchestratorEffort,
         orchestratorWeb: modelConfig.orchestratorWeb,
+        onUndefinedSubagent: (name) => logOrchestrator('subagent_denied_undefined', this.meetingId, { subagentType: name }),
       };
 
       let manualSubagents = 0;
@@ -1294,4 +1295,44 @@ export async function runManualResearch(
   } finally {
     await session.close().catch(() => undefined);
   }
+}
+
+export interface UnreadableInsightLine {
+  reason: 'no_json' | 'parse_error';
+  length: number;
+}
+
+export function scanInsightLines(resultText: string): { items: any[]; unreadable: UnreadableInsightLine[] } {
+  const items: any[] = [];
+  const unreadable: UnreadableInsightLine[] = [];
+  for (const line of resultText.split('\n')) {
+    const match = line.match(/INSIGHT:\s*(\{.*\})/);
+    if (!match) {
+      if (line.includes('INSIGHT:')) unreadable.push({ reason: 'no_json', length: line.length });
+      continue;
+    }
+    let input: unknown;
+    try {
+      input = JSON.parse(match[1]);
+    } catch {
+      unreadable.push({ reason: 'parse_error', length: line.length });
+      continue;
+    }
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      unreadable.push({ reason: 'parse_error', length: line.length });
+      continue;
+    }
+    items.push(input);
+  }
+  return { items, unreadable };
+}
+
+export function summarizeUnreadableInsightLines(unreadable: UnreadableInsightLine[]): {
+  count: number;
+  reasons: Record<string, number>;
+  lengths: number[];
+} {
+  const reasons: Record<string, number> = {};
+  for (const u of unreadable) reasons[u.reason] = (reasons[u.reason] ?? 0) + 1;
+  return { count: unreadable.length, reasons, lengths: unreadable.slice(0, 10).map((u) => u.length) };
 }

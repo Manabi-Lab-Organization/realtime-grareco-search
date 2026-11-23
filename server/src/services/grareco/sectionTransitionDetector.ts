@@ -82,7 +82,7 @@ async function confirmWithHaiku(
   try {
     raw = await analyzeWithClaude(systemPrompt, userMessage, {
       model: HAIKU_MODEL,
-      maxTokens: 256,
+      maxTokens: 512,
       temperature: 0.2,
       feature: 'anthropic:grareco.sectionTransition',
     });

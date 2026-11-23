@@ -1,19 +1,3 @@
-// 日付と曜日の食い違いを、プログラムで見つけて「要確認」と書き残す（2026-11-13）。
-//
-// AI（文章を書くモデル）は暦を計算せず、曜日を「もっともらしい文字」として推測で書く。今日が何年かも知らない。
-// 2026-11-13 の会議では「次週の土曜日 14時」（正しくは 11/21（土））がサマリーで「11/23（土）」になった。
-// 2024 年の暦（16日・23日が土曜）で数えたとみられる。議事録・グラレコはこのサマリーから作るので誤りが広がった。
-//
-// 防ぎ方は 2 段：
-//   1. AI への指示に「開催日」と「前後の暦（日付と曜日の一覧）」を入れる（dateContextBlock）。今回の根本原因への対策
-//   2. AI が書いた「月日（曜）」の曜日を暦で検算し、食い違えば **どちらかに決めつけず「要確認」と書き残す**（markWeekdayMismatches）
-//      日付と曜日のどちらが誤りかはプログラムでは決められない。最初の版は「日付を正として曜日を直す」作りだったが、
-//      それでは「11/23（土）」が「11/23（月）」になり、正しい「11/21（土）」から遠ざかるうえ、誤りの手がかりを消してしまう
-//
-// 年が書かれていない日付は、基準日（開催日）に最も近い年として扱う（12月の会議で「1月8日」→翌年）。
-// ただし基準日から NEAR_DAYS 日より離れた年なしの日付は、どの年のことか決めきれない。書かれた曜日が
-// 前年・同年・翌年のどれかで合っていれば、正しい可能性があるので印を付けない。
-
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** 年なしの日付を「基準日の近く」とみなす幅（日）。これより離れると年を決め打ちしない */
@@ -63,8 +47,23 @@ const PATTERNS: RegExp[] = [
 /** 印の文言。議事録・サマリーは理由まで書く。グラレコ（画像の文字）は短く */
 // 印は【】で囲み、前後の文と区切る（文の途中に入っても読めるように）
 const SHORT_NOTE = '【日付要確認】';
-function noteFor(correct: string, mode: MarkMode): string {
-  return mode === 'short' ? SHORT_NOTE : `【※日付と曜日が合いません（この日付は${correct}曜日）。日付をご確認ください】`;
+function noteFor(correct: string, mode: MarkMode, candidates = ''): string {
+  return mode === 'short' ? SHORT_NOTE : `【※日付と曜日が合いません（この日付は${correct}曜日${candidates}）。日付をご確認ください】`;
+}
+
+/** 書かれた曜日のほうが正しい場合の候補。書かれた日付の前後で、その曜日に当たるいちばん近い日を 1 つずつ */
+export function weekdayCandidates(y: number, m: number, d: number, wd: string): string {
+  const target = WEEKDAYS.indexOf(wd as (typeof WEEKDAYS)[number]);
+  if (target < 0 || !weekdayOf(y, m, d)) return '';
+  const t = Date.UTC(y, m - 1, d);
+  const back = (new Date(t).getUTCDay() - target + 7) % 7;
+  if (back === 0) return '';
+  const fmt = (ms: number) => {
+    const x = new Date(ms);
+    const md = `${x.getUTCMonth() + 1}/${x.getUTCDate()}`;
+    return x.getUTCFullYear() === y ? md : `${x.getUTCFullYear()}/${md}`;
+  };
+  return `。${wd}曜日なら ${fmt(t - back * DAY_MS)} か ${fmt(t + (7 - back) * DAY_MS)}`;
 }
 /**
  * すでに印が付いているか。AI が後の工程で文言を少し言い換えても重ねないよう、書き出しだけで見る
@@ -109,7 +108,7 @@ export function markWeekdayMismatches(
       const correct = weekdayOf(y, m, d);
       if (!correct || correct === wd) return whole;
       mismatches.push({ text: whole, correctWeekday: correct });
-      return whole + noteFor(correct, mode);
+      return whole + noteFor(correct, mode, weekdayCandidates(y, m, d, wd));
     });
   }
   return { text: out, mismatches };

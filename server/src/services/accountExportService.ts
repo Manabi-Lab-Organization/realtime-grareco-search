@@ -1,5 +1,5 @@
 import archiver from 'archiver';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { meetings, transcripts, structuredSummaries, analyses } from '../db/schema.js';
 import { buildSpeakerMapping, applySpeakerMapping } from './participantMappingService.js';
@@ -33,12 +33,53 @@ function formatParticipants(participants: unknown): string | null {
   return lines.length > 0 ? lines.join('\n') : null;
 }
 
-async function buildMeetingMarkdown(meeting: typeof meetings.$inferSelect): Promise<string> {
-  const rows = await db
+export const EXPORT_BATCH = 100;
+
+type TranscriptRow = typeof transcripts.$inferSelect;
+
+interface MeetingExportData {
+  transcripts: Map<number, TranscriptRow[]>;
+  summaries: Map<number, string>;
+  minutes: Map<number, string>;
+}
+
+async function loadMeetingExportData(meetingIds: number[]): Promise<MeetingExportData> {
+  const data: MeetingExportData = { transcripts: new Map(), summaries: new Map(), minutes: new Map() };
+  if (meetingIds.length === 0) return data;
+
+  const transcriptRows = await db
     .select()
     .from(transcripts)
-    .where(and(eq(transcripts.meetingId, meeting.id), eq(transcripts.isFinal, true)))
+    .where(and(inArray(transcripts.meetingId, meetingIds), eq(transcripts.isFinal, true)))
     .orderBy(asc(transcripts.startTime));
+  for (const row of transcriptRows) {
+    const list = data.transcripts.get(row.meetingId);
+    if (list) list.push(row);
+    else data.transcripts.set(row.meetingId, [row]);
+  }
+
+  const summaryRows = await db
+    .select({ meetingId: structuredSummaries.meetingId, content: structuredSummaries.content })
+    .from(structuredSummaries)
+    .where(inArray(structuredSummaries.meetingId, meetingIds))
+    .orderBy(desc(structuredSummaries.updatedAt));
+  for (const row of summaryRows) {
+    if (!data.summaries.has(row.meetingId)) data.summaries.set(row.meetingId, row.content);
+  }
+
+  const minutesRows = await db
+    .select({ meetingId: analyses.meetingId, content: analyses.content })
+    .from(analyses)
+    .where(and(inArray(analyses.meetingId, meetingIds), eq(analyses.type, 'minutes')))
+    .orderBy(desc(analyses.createdAt));
+  for (const row of minutesRows) {
+    if (!data.minutes.has(row.meetingId)) data.minutes.set(row.meetingId, row.content);
+  }
+  return data;
+}
+
+function buildMeetingMarkdown(meeting: typeof meetings.$inferSelect, data: MeetingExportData): string {
+  const rows = data.transcripts.get(meeting.id) ?? [];
   const mapping = buildSpeakerMapping(meeting.participants);
   const mapped = applySpeakerMapping(rows, mapping);
   const visible = filterNgTranscripts(mapped, parseNgKeywords(meeting.ngKeywords));
@@ -50,19 +91,8 @@ async function buildMeetingMarkdown(meeting: typeof meetings.$inferSelect): Prom
     })
     .join('\n');
 
-  const [summary] = await db
-    .select({ content: structuredSummaries.content })
-    .from(structuredSummaries)
-    .where(eq(structuredSummaries.meetingId, meeting.id))
-    .orderBy(desc(structuredSummaries.updatedAt))
-    .limit(1);
-
-  const [minutes] = await db
-    .select({ content: analyses.content })
-    .from(analyses)
-    .where(and(eq(analyses.meetingId, meeting.id), eq(analyses.type, 'minutes')))
-    .orderBy(desc(analyses.createdAt))
-    .limit(1);
+  const summary = data.summaries.get(meeting.id);
+  const minutes = data.minutes.get(meeting.id);
 
   const parts: string[] = [];
   parts.push(`# ${meeting.title || '無題の会議'}`, '');
@@ -73,11 +103,11 @@ async function buildMeetingMarkdown(meeting: typeof meetings.$inferSelect): Prom
   if (participantsMd) {
     parts.push('## 参加者', '', participantsMd, '');
   }
-  if (summary?.content) {
-    parts.push('## 要約', '', summary.content, '');
+  if (summary) {
+    parts.push('## 要約', '', summary, '');
   }
-  if (minutes?.content) {
-    parts.push('## 議事録', '', minutes.content, '');
+  if (minutes) {
+    parts.push('## 議事録', '', minutes, '');
   }
   parts.push('## 文字起こし', '', transcriptText || '（文字起こしはありません）', '');
   return parts.join('\n');
@@ -103,11 +133,15 @@ export async function buildAccountExportZip(userId: number): Promise<Buffer> {
     archive.append('エクスポート対象の会議データがありません。\n', { name: 'README.txt' });
   } else {
     let i = 0;
-    for (const meeting of list) {
-      i++;
-      const md = await buildMeetingMarkdown(meeting);
-      const idx = String(i).padStart(3, '0');
-      archive.append(md, { name: `${idx}_${sanitizeFileName(meeting.title)}.md` });
+    for (let start = 0; start < list.length; start += EXPORT_BATCH) {
+      const batch = list.slice(start, start + EXPORT_BATCH);
+      const data = await loadMeetingExportData(batch.map((m) => m.id));
+      for (const meeting of batch) {
+        i++;
+        const md = buildMeetingMarkdown(meeting, data);
+        const idx = String(i).padStart(3, '0');
+        archive.append(md, { name: `${idx}_${sanitizeFileName(meeting.title)}.md` });
+      }
     }
   }
 

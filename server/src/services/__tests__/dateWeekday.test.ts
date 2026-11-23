@@ -1,7 +1,3 @@
-// 日付と曜日の食い違いを「要確認」と書き残す（2026-11-13）。
-// 実例：2026-11-13（金）の会議で「次週の土曜日 14時」と決めた（正しくは 11/21（土））のに、
-// サマリー・議事録・グラレコに「11/23（土）」「土曜日（11/16想定）」と出た（2024 年の暦で数えたとみられる）。
-// 日付と曜日のどちらが誤りかはプログラムでは決められないので、書き換えずに印を付ける。
 import { describe, it, expect } from 'vitest';
 import {
   markWeekdayMismatches,
@@ -10,20 +6,20 @@ import {
   weekdayOf,
   dateContextBlock,
   formatJstDateWithWeekday,
+  weekdayCandidates,
   type WeekdayMismatch,
 } from '../dateWeekday.js';
 
-// 2026-11-13（金）14:00 JST の会議
 const base = new Date('2026-11-13T05:00:00Z');
-const NOTE_MON = '【※日付と曜日が合いません（この日付は月曜日）。日付をご確認ください】';
+const NOTE_MON_SAT = '【※日付と曜日が合いません（この日付は月曜日。土曜日なら 11/21 か 11/28）。日付をご確認ください】';
 
 describe('markWeekdayMismatches：食い違いに印を付け、書き換えない', () => {
-  it('今回の会議で出た誤り：日付も曜日も変えず、印を付ける（正しい 11/21 から遠ざけない）', () => {
+  it('日付も曜日も変えず、印を付ける（正しい 11/21 から遠ざけない）', () => {
     const r = markWeekdayMismatches('次回の定例会議は11/23（土）14:00に変更されました。', base);
-    expect(r.text).toBe(`次回の定例会議は11/23（土）${NOTE_MON}14:00に変更されました。`);
+    expect(r.text).toBe(`次回の定例会議は11/23（土）${NOTE_MON_SAT}14:00に変更されました。`);
     expect(r.mismatches).toEqual([{ text: '11/23（土）', correctWeekday: '月' }]);
     expect(markWeekdayMismatches('次回の定例会議を2026年11月23日 (土) 14:00に変更する', base).text).toBe(
-      `次回の定例会議を2026年11月23日 (土)${NOTE_MON} 14:00に変更する`,
+      `次回の定例会議を2026年11月23日 (土)${NOTE_MON_SAT} 14:00に変更する`,
     );
   });
 
@@ -141,5 +137,22 @@ describe('サマリー・議事録を作る AI に開催日と暦を渡してい
     const analyze = src.slice(src.indexOf('export async function analyzeTranscript'), src.indexOf('// ─── Summary', src.indexOf('export async function analyzeTranscript')) > 0 ? src.indexOf('// ─── Summary', src.indexOf('export async function analyzeTranscript')) : undefined);
     expect(analyze).toContain('let fullText = `${dateContextBlock(baseDate)}\\n\\n`;');
     expect(analyze).toContain("markWeekdayMismatches(response.text || '分析結果を取得できませんでした。', baseDate)");
+  });
+});
+
+describe('weekdayCandidates：書かれた曜日に当たる前後の日を添える', () => {
+  it('前後でいちばん近い日を 1 つずつ', () => {
+    expect(weekdayCandidates(2026, 11, 23, '土')).toBe('。土曜日なら 11/21 か 11/28');
+    expect(weekdayCandidates(2026, 11, 23, '火')).toBe('。火曜日なら 11/17 か 11/24');
+  });
+
+  it('年をまたぐ候補は年も書く', () => {
+    expect(weekdayCandidates(2026, 12, 30, '土')).toBe('。土曜日なら 12/26 か 2027/1/2');
+  });
+
+  it('食い違っていない・実在しない日付・曜日でない字は空', () => {
+    expect(weekdayCandidates(2026, 11, 23, '月')).toBe('');
+    expect(weekdayCandidates(2026, 2, 30, '土')).toBe('');
+    expect(weekdayCandidates(2026, 11, 23, '曜')).toBe('');
   });
 });
